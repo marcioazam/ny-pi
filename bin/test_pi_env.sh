@@ -37,10 +37,4 @@ ok "$PONYTAIL_QUIET_STARTUP" 5 "caller env wins"
 mk h 'PI_BYPASS_PERMISSIONS=1' 600
 pi_load_local_env "$d/h"
 ok "$PI_BYPASS_PERMISSIONS" 1 "valid PI_BYPASS_PERMISSIONS applied"
-
-hl() { if pi_is_headless "$@"; then echo yes; else echo no; fi; }
-ok "$(hl -p 'faz x')" yes "-p is headless"
-ok "$(hl --model m --print x)" yes "--print is headless"
-ok "$(hl --plan 'a -p b' --printer)" no "interactive call is not headless"
-ok "$(hl)" no "no args is not headless"
 exit "$fail"

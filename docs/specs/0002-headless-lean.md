@@ -12,7 +12,7 @@ sem o harness. Causas:
 2. `question` devolvia `Error: UI not available` e a resposta final saía sem pergunta (4 de 8).
 3. A seção `<cwd>` ficava dentro do único bloco de sistema com `cache_control`, então cerca de 21,7 mil tokens eram
    regravados no cache a cada sessão em outro diretório.
-4. Uma chamada extra para o título da sessão e a linha `Graph: ... has no codegraph index` em toda execução.
+4. Uma chamada extra para o título da sessão em toda execução.
 
 ## Comportamento
 
@@ -26,24 +26,20 @@ item 3 e a rede do item 1, que valem para toda sessão.
 | 2 | Sem interface, `question` não fica ativa. Rede: o erro de UI vira "escreva as perguntas, cada uma terminada em `?`, na resposta final e encerre o turno sem alterar arquivos". | `session_start`, `tool_result` |
 | 3 | Pedido Anthropic: a seção `<cwd>` sai do bloco de sistema em cache e vai para um bloco final sem `cache_control`. O bloco em cache fica byte-idêntico entre diretórios; nenhum ponto de cache é criado e os demais blocos mantêm a ordem. Payload em outro formato segue intacto (`PI_HEADLESS_LEAN_DEBUG=1` escreve o motivo no stderr). | `before_provider_request` |
 | 4 | Sem interface, o título de sessão não é gerado (`CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1`, salvo valor já definido). | `session_start` |
-| 5 | Em `pi -p` o wrapper exporta `PI_HEADLESS=1` e o hook omite, no SessionStart, a linha `Graph: ... has no codegraph index`. As linhas de índice existente, de indexação iniciada, de workspace e as do SubagentStart continuam. | `bin/pi`, `claude-home/hooks/graph_context.py` |
-| 6 | Contrato: fora do modo plano, "planeje antes" é plano curto e implementação no mesmo turno, salvo pedido contraditório ou com escolha em aberto; sem interface, as perguntas vão na resposta final. | `claude-home/CLAUDE.md`, Delivery |
+| 5 | Contrato: fora do modo plano, "planeje antes" é plano curto e implementação no mesmo turno, salvo pedido contraditório ou com escolha em aberto; sem interface, as perguntas vão na resposta final. | `claude-home/CLAUDE.md`, Delivery |
 
 ## Limites conhecidos
 
 - O modo plano é detectado pelo `argv` (`--plan`, prompt `/plan ...`): um `/plan` enviado por stdin não é visto e
   a ferramenta fica inativa nessa execução.
-- O wrapper só reconhece `-p` e `--print`; no modo JSON a linha do grafo continua.
+- A linha `Graph: ... has no codegraph index` continua nas execuções sem interface (fora desta mudança).
 - O ganho de cache só aparece quando sessões novas começam em diretórios diferentes dentro do TTL do cache.
 - Nenhuma ferramenta foi removida (`lsp_*`, Antigravity): fica para uma ablação medida.
 
 ## Testes
 
 - `node --experimental-strip-types --test extensions/headless-lean/index.test.ts`
-- `python3 -m pytest claude-home/hooks/test_graph_context.py`
-- `sh bin/test_pi_env.sh`
 
 ## Reverter
 
-Apagar `extensions/headless-lean/` (ou `PI_HEADLESS_LEAN=0`), o bloco `pi_is_headless` de `bin/pi`, a condição
-`PI_HEADLESS` do hook e a frase do contrato.
+Apagar `extensions/headless-lean/` (ou `PI_HEADLESS_LEAN=0`) e a frase do contrato.

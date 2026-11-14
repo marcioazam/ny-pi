@@ -53,9 +53,9 @@ Cuidado: no texto (fora de código) qualquer `@palavra` vira tentativa de import
 
 ## Fontes consultadas (2026-11-11)
 
-- https://code.claude.com/docs/en/memory: CLAUDE.md abaixo de 200 linhas; instruções específicas e verificáveis;
+- <https://code.claude.com/docs/en/memory>: CLAUDE.md abaixo de 200 linhas; instruções específicas e verificáveis;
   rules sem `paths` carregam sempre; regras do usuário em `~/.claude/rules`; imports não reduzem contexto.
-- https://code.claude.com/docs/en/best-practices: o que deve ficar sempre carregado; requisito sem exceção vai para
+- <https://code.claude.com/docs/en/best-practices>: o que deve ficar sempre carregado; requisito sem exceção vai para
   hook ou deny.
 - Docs locais do pi (`docs/configuration.md`, `security.md`): context files carregam sem trust; `AGENTS.md`
   global do pi existe, mas o caminho escolhido é o do pi-code para manter a estrutura do Claude (CLAUDE.md + rules).
