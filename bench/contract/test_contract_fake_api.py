@@ -1,8 +1,7 @@
 """Unit tests of the scripted fake Messages API, through a stdlib HTTP client."""
 
+import http.client
 import json
-import urllib.error
-import urllib.request
 from pathlib import Path
 from typing import Any
 
@@ -14,14 +13,23 @@ SCRIPT = {
 }
 
 
-def post(port: int, body: dict[str, Any]) -> tuple[str, str]:
-    request = urllib.request.Request(
-        f"http://127.0.0.1:{port}/v1/messages",
-        data=json.dumps(body).encode(),
-        headers={"content-type": "application/json", "authorization": "Bearer segredo"},
-    )
-    with urllib.request.urlopen(request, timeout=10) as response:
+def post(
+    port: int, body: dict[str, Any], path: str = "/v1/messages"
+) -> tuple[str, str]:
+    conn = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
+    try:
+        conn.request(
+            "POST",
+            "/v1/messages",
+            json.dumps(body),
+            {"content-type": "application/json", "authorization": "Bearer segredo"},
+        )
+        response = conn.getresponse()
+        if response.status >= 400:
+            raise RuntimeError(f"http {response.status}")
         return response.headers["content-type"], response.read().decode()
+    finally:
+        conn.close()
 
 
 def events(stream: str) -> list[dict[str, Any]]:
@@ -95,11 +103,11 @@ def test_unrouted_past_script_and_non_stream_answers() -> None:
         assert tool["content"][0]["input"] == {"command": "echo ok"}
         assert len(api.requests("")) == 1
         assert api.step_for("c1", 5) == Step()
-        with pytest.raises(urllib.error.HTTPError):
-            urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=10)
-    with pytest.raises(
-        urllib.error.URLError
-    ):  # clean shutdown: the port no longer answers
+        conn = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
+        conn.request("GET", "/")
+        assert conn.getresponse().status >= 400
+        conn.close()
+    with pytest.raises(OSError):  # clean shutdown: the port no longer answers
         post(port, {"messages": []})
     api.stop()  # idempotent
     with pytest.raises(RuntimeError):
