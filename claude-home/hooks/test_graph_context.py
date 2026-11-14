@@ -13,7 +13,7 @@ HOOK = os.path.join(HERE, "graph_context.py")
 
 
 def run(event, cwd, env_extra=None, raw=None):
-    env = {**os.environ, "CODEGRAPH_STATUS_TTL": "0", **(env_extra or {})}
+    env = {**os.environ, "CODEGRAPH_STATUS_TTL": "0", "PI_HEADLESS": "", **(env_extra or {})}
     payload = raw if raw is not None else json.dumps({"hook_event_name": event, "cwd": cwd})
     p = subprocess.run([sys.executable, HOOK], input=payload, capture_output=True, text=True, env=env, timeout=20)
     assert p.returncode == 0, p.stderr
@@ -59,6 +59,24 @@ class TestGraphContext(unittest.TestCase):
         self.assertIn("tool_search", ctx)
         self.assertNotIn("ToolSearch", ctx)
         self.assertNotIn("Knowledge vault:", ctx)  # só no SessionStart
+
+    def test_headless_session_start_drops_the_no_index_line_only(self):
+        repo = git_repo(os.path.join(self.tmp, "myrepo"))
+        env = {**self.env, "PI_HEADLESS": "1"}
+        ctx = run("SessionStart", repo, env)
+        self.assertNotIn("Graph:", ctx)
+        self.assertTrue(ctx.startswith("Knowledge vault:"), ctx)
+        self.assertIsNone(run("SessionStart", repo, {"PI_HEADLESS": "1", "PI_KNOWLEDGE_VAULT": ""}))
+        # o subagente continua avisado da cobertura degradada, e fora de um repo a linha de workspace fica
+        self.assertIn("no codegraph index", run("SubagentStart", repo, env))
+        self.assertIn("Workspace:", run("SessionStart", self.tmp, env))
+
+    def test_headless_session_start_keeps_the_line_of_an_indexed_repo(self):
+        repo = git_repo(os.path.join(self.tmp, "repo"))
+        os.makedirs(os.path.join(repo, ".codegraph"))
+        open(os.path.join(repo, ".codegraph", "codegraph.db"), "w").close()
+        env = {**self.env, "PI_HEADLESS": "1", "CODEGRAPH_BIN": self.fake_codegraph({"initialized": True, "pendingChanges": {}, "index": {"state": "complete"}, "lastIndexed": "2026-11-11T10:00"})}
+        self.assertIn(f"Graph: codegraph root={repo} index=fresh", run("SessionStart", repo, env))
 
     def test_session_start_lists_brain_route_with_pi_kb_path(self):
         repo = git_repo(os.path.join(self.tmp, "myrepo"))

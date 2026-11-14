@@ -39,6 +39,14 @@ pi_load_local_env() {
   done < "$f"
 }
 
+# pi_is_headless ARGS...: true when the call is a print run (-p/--print), which has no UI.
+pi_is_headless() {
+  for a in "$@"; do
+    case "$a" in -p|--print) return 0 ;; esac
+  done
+  return 1
+}
+
 [ -n "${PI_WRAPPER_TEST:-}" ] && return 0
 
 pi_load_local_env "${PI_LOCAL_ENV:-$HOME/.pi/agent/local.env}"
@@ -69,6 +77,12 @@ while [ "$n" -gt 0 ]; do
   esac
 done
 export PI_BYPASS_PERMISSIONS
+
+# Print runs: hooks cannot see ctx.hasUI, so they read this (graph_context.py drops its "no index" line).
+if pi_is_headless "$@"; then
+  : "${PI_HEADLESS:=1}"
+  export PI_HEADLESS
+fi
 
 # Subcommands (pi install/list/mcp/...) pass straight through: session flags before them
 # would make pi treat the subcommand as a prompt.

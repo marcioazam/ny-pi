@@ -124,6 +124,10 @@ Critério (terceira rodada): entra no pi só o que paga o próprio custo; observ
   `ttl: 1h` no cache de tools e system, só com UI e fora de subagente; `PI_PREFIX_CACHE_1H=0` desliga. Replay
   ≈ US$ 4,45/dia líquidos; A/B e testes em `pi-claude-harness-transfer-2026-11-12.md` ("Fechamento, rodada 2");
   teste `bin/tests/prefix-cache-1h.test.ts`.
+- **headless-lean** (`extensions/headless-lean/index.ts`, 2026-11-14): sem UI (`pi -p`, JSON) `question` e
+  `plan_mode_complete` ficam inativas (`--plan` ou prompt `/plan` mantêm a segunda) e o título de sessão não é
+  gerado; em toda sessão Anthropic o `<cwd>` vira bloco de sistema final sem `cache_control`. `PI_HEADLESS_LEAN=0`
+  desliga. Contrato e medição: `docs/specs/0002-headless-lean.md` do repositório.
 - **Relatórios**: `python3 ~/.pi/agent/claude-home/bin/telemetry/pi_telemetry.py [tools|subagents|audit|claims|plan-gate|cost|all]
   [--since DIAS] [--json]`. `claims` usa `hooks/claims/claims.py` e `patterns.ere`, cópias literais das do Claude
   (vigiadas pelo manifesto). Só metadados; o alvo da auditoria sai mascarado.

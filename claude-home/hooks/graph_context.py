@@ -21,7 +21,8 @@ so it never probes the Obsidian CLI.
 
 Env overrides for tests: CODEGRAPH_BIN, CODEGRAPH_AUTO_ROOT, CODEGRAPH_AUTO_STATE,
 CODEGRAPH_AUTO_MAX_FILES, PI_KNOWLEDGE_VAULT, PI_GRAPHS_VAULT, CODEGRAPH_STATUS_CACHE (cache directory),
-CODEGRAPH_STATUS_TTL (seconds, 0 disables).
+CODEGRAPH_STATUS_TTL (seconds, 0 disables). PI_HEADLESS=1 (set by bin/pi for -p/--print) drops the SessionStart
+"no codegraph index" line; every other line stays.
 
 Cost: `codegraph status --json` is a Node process (about 270 ms, 212 MB), the whole price of this hook. Its result is
 cached per index for STATUS_TTL seconds and dropped as soon as the index database or its WAL changes (the MCP watcher
@@ -267,7 +268,7 @@ def build_context(cwd: str, event: str = "SubagentStart") -> str | None:
         return workspace_warning(cwd)
     graph = graph_line(cwd, root, event)
     kb = knowledge(root) if event == "SessionStart" else None
-    return f"{graph}\n{kb}" if kb else graph
+    return "\n".join(part for part in (graph, kb) if part) or None
 
 
 def graph_line(cwd: str, root: str, event: str) -> str:
@@ -280,6 +281,8 @@ def graph_line(cwd: str, root: str, event: str) -> str:
             what = "indexing started in background" if spawned[0] == "started" else "indexing already running or failed recently"
             return (f"Graph: {root} has no codegraph index yet; {what} (`codegraph init`, log {spawned[1]}); "
                     f"use rg/fdfind until `codegraph status {root}` is complete, then mcp__codegraph__* with projectPath={root}.")
+        if event == "SessionStart" and os.environ.get("PI_HEADLESS") == "1":
+            return ""  # `pi -p` (bin/pi): one unattended run, and the line was echoed into final answers
         return (f"Graph: {root} has no codegraph index; use rg/fdfind and report degraded coverage. "
                 "Auto-indexing covers main checkouts under ~/source; elsewhere run `codegraph init` only when the "
                 "task asks for it (never home, worktrees, /tmp or from a subagent).")
