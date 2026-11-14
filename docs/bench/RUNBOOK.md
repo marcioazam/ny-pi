@@ -36,6 +36,8 @@ Pré-requisitos no PATH: `gh` autenticado como o dono do repositório, `git`, `j
 | `BENCH_STATE` | não | estado e clone (default `~/.local/state/bench`) |
 | `BENCH_NIGHTLY_BUDGET` | não | teto em US$ do nightly (default 30) |
 | `BENCH_MODEL` | não | modelo fixo da rodada (default `claude-sonnet-5-5`) |
+| `BENCH_JOBS` | não | paralelismo da rodada (default 4); tem de ser igual ao `jobs` do `baseline-main` (hoje 6), senão o gate dá NOT_COMPARABLE |
+| `BENCH_PR_BUDGET` | não | teto em US$ da rodada de PR (default 12) |
 
 ## Fluxo do PR
 
