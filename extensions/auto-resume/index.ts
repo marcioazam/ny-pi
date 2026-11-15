@@ -16,7 +16,7 @@
  * transitório. `message_end` marca o erro com "quota exceeded" (padrão não-retryável do pi-ai), então o pi não gasta as
  * 10 retentativas; o settle espera até o reset (+1 min) e retoma sozinho. O horário vem dos headers do 429
  * (`anthropic-ratelimit-unified-*reset`, `retry-after`), senão do cache do HUD (usage-cache.json, a mesma fonte do
- * "resets in 41m"), senão 15 min. No máximo 3 esperas seguidas. Filhos (`PI_CODE_SUBAGENT`) falham rápido; o principal espera.
+ * "resets in 41m"), senão 15 min. No máximo 3 esperas seguidas. Filhos (`PI_CODE_SUBAGENT`) e sessões sem UI (`pi -p`, `ctx.hasUI` falso) falham rápido (give_up, aviso no stderr); o principal com UI espera.
  */
 import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
@@ -95,8 +95,10 @@ export function limitReset(headers: Record<string, string>, cache: any, now: num
 
 const clock = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 
-function decideLimit(branch: Entry[], last: number, error: string, env: Record<string, string | undefined>, opts: { now: number; resetAt?: number }): Decision {
+function decideLimit(branch: Entry[], last: number, error: string, env: Record<string, string | undefined>, opts: { now: number; resetAt?: number; hasUI?: boolean }): Decision {
   if (env.PI_CODE_SUBAGENT) return { action: 'none' }
+  // No UI (pi -p): nobody can see or cancel a long wait (gate #28: 600 s lost to a headless 429); end now.
+  if (opts.hasUI === false) return { action: 'give_up', message: `Auto-resume: account usage limit reached in a session without a UI; not waiting for the reset ("${error.slice(0, MAX_ERR)}").` }
   let prior = 0
   for (let i = last; i >= 0; i--) {
     const e = branch[i]
@@ -116,7 +118,7 @@ function decideLimit(branch: Entry[], last: number, error: string, env: Record<s
   }
 }
 
-export function decideResume(branch: Entry[], env: Record<string, string | undefined> = process.env, opts: { now: number; resetAt?: number } = { now: Date.now() }): Decision {
+export function decideResume(branch: Entry[], env: Record<string, string | undefined> = process.env, opts: { now: number; resetAt?: number; hasUI?: boolean } = { now: Date.now() }): Decision {
   if (env.PI_AUTO_RESUME === '0') return { action: 'none' }
   let last = -1
   for (let i = branch.length - 1; i >= 0; i--) {
@@ -193,7 +195,7 @@ export default function (pi: ExtensionAPI, wait: typeof sleep = sleep, now: () =
   pi.on('agent_before_settle', async (event: any, ctx: any) => {
     try {
       const t = now()
-      const d = decideResume(ctx.sessionManager.getBranch() as Entry[], process.env, { now: t, resetAt: limitReset(limitHeaders, hudCache(), t) })
+      const d = decideResume(ctx.sessionManager.getBranch() as Entry[], process.env, { now: t, resetAt: limitReset(limitHeaders, hudCache(), t), hasUI: Boolean(ctx.hasUI) })
       if (d.action === 'none') return
       if (d.action === 'give_up') {
         if (ctx.ui?.notify) ctx.ui.notify(d.message, 'warning')

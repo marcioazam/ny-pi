@@ -131,7 +131,7 @@ test('handler: message_end marca o erro, after_provider_response guarda os heade
   await h.after_provider_response({ status: 200, headers: {} })
   const status: any[] = []
   const notes: any[] = []
-  const ctx = { sessionManager: { getBranch: () => [{ type: 'message', message: r.message }] }, ui: { setStatus: (...a: any[]) => status.push(a), notify: (...a: any[]) => notes.push(a) } }
+  const ctx = { hasUI: true, sessionManager: { getBranch: () => [{ type: 'message', message: r.message }] }, ui: { setStatus: (...a: any[]) => status.push(a), notify: (...a: any[]) => notes.push(a) } }
   const out = await h.agent_before_settle({ entries: [] }, ctx)
   assert.deepEqual(waits, [660_000], 'header do 429 sobrevive a um 200 sem headers de limite')
   assert.equal(out.continue, true)
@@ -149,7 +149,7 @@ test('handler: resposta bem-sucedida descarta headers de um 429 antigo', async (
   await h.message_end({ message: { role: 'assistant', stopReason: 'stop' } })
   assert.equal(await h.message_end({ message: { role: 'user' } }), undefined)
   const r = await h.message_end({ message: { role: 'assistant', stopReason: 'error', errorMessage: LIMIT } })
-  const ctx = { sessionManager: { getBranch: () => [{ type: 'message', message: r.message }] }, ui: { setStatus() {}, notify() {} } }
+  const ctx = { hasUI: true, sessionManager: { getBranch: () => [{ type: 'message', message: r.message }] }, ui: { setStatus() {}, notify() {} } }
   const saved = process.env.PI_CODE_SUBAGENT
   delete process.env.PI_CODE_SUBAGENT
   const cfg = process.env.CLAUDE_CONFIG_DIR
@@ -174,9 +174,9 @@ test('handler: depois de 3 esperas desiste e avisa (ui ou stderr)', async () => 
   const errs: string[] = []
   const write = process.stderr.write
   try {
-    assert.equal(await h.agent_before_settle({ entries: [] }, { sessionManager: { getBranch: () => branch }, ui: { notify: (...a: any[]) => notes.push(a) } }), undefined)
+    assert.equal(await h.agent_before_settle({ entries: [] }, { hasUI: true, sessionManager: { getBranch: () => branch }, ui: { notify: (...a: any[]) => notes.push(a) } }), undefined)
     process.stderr.write = ((s: string) => (errs.push(s), true)) as any
-    await h.agent_before_settle({ entries: [] }, { sessionManager: { getBranch: () => branch } })
+    await h.agent_before_settle({ entries: [] }, { hasUI: true, sessionManager: { getBranch: () => branch } })
   } finally {
     process.stderr.write = write
     if (saved !== undefined) process.env.PI_CODE_SUBAGENT = saved
@@ -192,7 +192,7 @@ test('handler: Esc durante a espera descarta os headers usados (a próxima esper
   register({ on: (e: string, f: any) => (h[e] = f) } as any, async (ms: number) => (waits.push(ms), false), () => NOW)
   await h.after_provider_response({ status: 429, headers: { 'anthropic-ratelimit-unified-reset': String((NOW + 3 * 3_600_000) / 1000) } })
   const r = await h.message_end({ message: { role: 'assistant', stopReason: 'error', errorMessage: LIMIT } })
-  const ctx = { sessionManager: { getBranch: () => [{ type: 'message', message: r.message }] }, ui: { setStatus() {}, notify() {} } }
+  const ctx = { hasUI: true, sessionManager: { getBranch: () => [{ type: 'message', message: r.message }] }, ui: { setStatus() {}, notify() {} } }
   const saved = process.env.PI_CODE_SUBAGENT
   const cfg = process.env.CLAUDE_CONFIG_DIR
   delete process.env.PI_CODE_SUBAGENT
@@ -214,7 +214,7 @@ test('handler: erro que não é de limite descarta headers de um 429 anterior', 
   await h.after_provider_response({ status: 429, headers: { 'anthropic-ratelimit-unified-reset': String((NOW + 3 * 3_600_000) / 1000) } })
   assert.equal(await h.message_end({ message: { role: 'assistant', stopReason: 'error', errorMessage: '429 too many requests' } }), undefined)
   const r = await h.message_end({ message: { role: 'assistant', stopReason: 'error', errorMessage: LIMIT } })
-  const ctx = { sessionManager: { getBranch: () => [{ type: 'message', message: r.message }] }, ui: { setStatus() {}, notify() {} } }
+  const ctx = { hasUI: true, sessionManager: { getBranch: () => [{ type: 'message', message: r.message }] }, ui: { setStatus() {}, notify() {} } }
   const saved = process.env.PI_CODE_SUBAGENT
   const cfg = process.env.CLAUDE_CONFIG_DIR
   delete process.env.PI_CODE_SUBAGENT
@@ -224,4 +224,34 @@ test('handler: erro que não é de limite descarta headers de um 429 anterior', 
     if (cfg === undefined) delete process.env.CLAUDE_CONFIG_DIR; else process.env.CLAUDE_CONFIG_DIR = cfg
   }
   assert.deepEqual(waits, [15 * 60_000], 'o 429 comum já foi tratado; seus headers não definem a espera do limite seguinte')
+})
+
+test('handler: limite da conta sem UI (pi -p) desiste na hora e avisa no stderr; com UI espera', async (t) => {
+  const saved = process.env.PI_CODE_SUBAGENT
+  delete process.env.PI_CODE_SUBAGENT
+  t.after(() => { if (saved !== undefined) process.env.PI_CODE_SUBAGENT = saved })
+  const waits: number[] = []
+  const h: Record<string, any> = {}
+  register({ on: (e: string, f: any) => (h[e] = f) } as any, async (ms: number) => (waits.push(ms), true), () => NOW)
+  const r = await h.message_end({ message: { role: 'assistant', stopReason: 'error', errorMessage: LIMIT } })
+  const sessionManager = { getBranch: () => [{ type: 'message', message: r.message }] }
+  const errs: string[] = []
+  const write = process.stderr.write
+  process.stderr.write = ((s: string) => (errs.push(s), true)) as any
+  try {
+    assert.equal(await h.agent_before_settle({ entries: [] }, { hasUI: false, sessionManager }), undefined)
+  } finally {
+    process.stderr.write = write
+  }
+  assert.deepEqual(waits, [], 'sem UI: nenhuma espera')
+  assert.match(errs.join(''), /without a UI/)
+  const out = await h.agent_before_settle({ entries: [] }, { hasUI: true, sessionManager, ui: { setStatus() {}, notify() {} } })
+  assert.equal(out.continue, true)
+  assert.equal(waits.length, 1, 'com UI: espera como antes')
+})
+
+test('decideResume: limite da conta sem UI é give_up; 503 sem UI segue com retentativa', () => {
+  const d = decideResume([err(markLimit(LIMIT)!)], {}, { now: NOW, hasUI: false })
+  assert.equal(d.action, 'give_up')
+  assert.equal(decideResume([err('503')], {}, { now: NOW, hasUI: false }).action, 'resume')
 })
