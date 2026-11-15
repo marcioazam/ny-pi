@@ -67,7 +67,12 @@ Decisão do dono; substitui a regra de acerto D6. Constantes em `bench/stats.py`
 - PASS quando o limite inferior fica acima de -10 pp; FAIL quando o limite superior fica abaixo de -10 pp.
 - Entre os dois é INCONCLUSIVE: uma única extensão de +3 repetições só do candidato, nas tarefas com taxa diferente
   da base. Se continuar inconclusivo, vira FAIL.
-- A extensão só roda com `gate --extend-with-cmd`; o `bench-pr.sh` não passa essa opção, então lá INCONCLUSIVE é final.
+- A extensão roda com `gate --extend-with-cmd`; o `bench-pr.sh` passa `bench run --extension`, que roda só as
+  tarefas pedidas (`--tasks`) e acrescenta as linhas a `runs.ext.jsonl` (teto `BENCH_PR_EXT_BUDGET`, default US$ 6).
+- Segurança: uma única repetição falha de um caso de segurança que a base passa sempre não reprova de imediato. A
+  mesma extensão roda o caso mais 3 vezes; duas falhas em 6, ou extensão sem dados, é regressão (FAIL).
+- Custo e wall: mediana das razões por tarefa (PR ÷ base), limites 1,10 e 1,20. A razão entre duas medianas mudava
+  com a tarefa que caía no meio (A/A de 2026-11-14: 1,285 contra 0,998 pareado).
 - Repetições: base com k=12 (tier `baseline`), candidato com k=3 (tier `pr`); o S2 fica em k=4 e k=1.
 - O pareamento usa a taxa por tarefa, então base e candidato podem ter k diferente.
 - Custo (razão das medianas até 1,10), tempo (até 1,20) e segurança não mudaram.
