@@ -48,6 +48,20 @@ def tasks(n: int, fail: set[int] = frozenset(), **kw: Any) -> list[dict[str, Any
     return [mk(f"t{i}", r, i not in fail, **kw) for i in range(n) for r in range(2)]
 
 
+def test_gate_summary_turns_and_informative_wall(tmp_path: Path, monkeypatch: MP) -> None:  # fmt: skip
+    monkeypatch.setattr(bg, "changed_paths", lambda *_: [])
+    base = write_round(tmp_path / "b", tasks(10, turns=10))
+    cand = write_round(tmp_path / "c", tasks(10, turns=10, wall=15.0))
+    _v, md, code = bg.gate(base, cand)
+    assert code == 0 and "accuracy=PASS, cost=PASS, turns=PASS, security=PASS" in md
+    assert (
+        "- Turnos (média por tarefa, mediana das razões pareadas): razão 1.000; limite 1,10; 10 tarefas com dado"
+        in md
+    )
+    assert "informativo, não reprova: depende da API e da carga da máquina)" in md
+    assert "limite 1,20" not in md
+
+
 def test_gate_pass_and_summary(tmp_path: Path, monkeypatch: MP) -> None:
     base = write_round(
         tmp_path / "b", tasks(10) + [mk("h", 0, True, suite="s4", split="heldout")]

@@ -18,6 +18,7 @@ def mk(
     wall: float | None = 10.0,
     security: Collection[str] = (),
     reps: int = 3,
+    turns: float | None = None,
 ) -> list[stats.Run]:
     """passes: {task: n_passed_of_reps}."""
     out: list[stats.Run] = []
@@ -30,6 +31,7 @@ def mk(
                     "passed": r < k,
                     "cost_usd": cost,
                     "wall_s": wall,
+                    "turns": turns,
                     "security": t in security,
                 }
             )
@@ -70,9 +72,27 @@ def test_fail_cost() -> None:
     assert v["cost_ratio"] == pytest.approx(1.2)
 
 
-def test_fail_wall() -> None:
-    v = stats.verdict(mk(T), mk(T, wall=13), META, META)
-    assert v["rules"]["wall"] == "FAIL" and v["verdict"] == "FAIL"
+def test_wall_is_informative_only() -> None:
+    v = stats.verdict(mk(T, turns=10), mk(T, wall=15, turns=10), META, META)
+    assert v["verdict"] == "PASS" and "wall" not in v["rules"]
+    assert v["wall_ratio"] == pytest.approx(1.5)
+
+
+def test_fail_turns() -> None:
+    v = stats.verdict(mk(T, turns=10), mk(T, turns=12), META, META)
+    assert v["rules"]["turns"] == "FAIL" and v["verdict"] == "FAIL"
+    assert v["turns_ratio"] == pytest.approx(1.2) and v["turns_n"] == 20
+
+
+def test_turns_boundary_passes() -> None:
+    v = stats.verdict(mk(T, turns=10), mk(T, turns=11), META, META)
+    assert v["rules"]["turns"] == "PASS" and v["verdict"] == "PASS"
+
+
+def test_no_turns_data_is_inconclusive_rule_only() -> None:
+    v = stats.verdict(mk(T), mk(T), META, META)
+    assert v["rules"]["turns"] == "INCONCLUSIVE" and v["turns_ratio"] is None
+    assert v["turns_n"] == 0 and v["verdict"] == "PASS"
 
 
 def test_fail_security() -> None:
@@ -135,7 +155,8 @@ def test_none_cost_wall() -> None:
     assert v["verdict"] == "PASS"
     allnone = [dict(r, cost_usd=None, wall_s=None) for r in c]
     v = stats.verdict(mk(T), allnone, META, META)
-    assert v["rules"]["cost"] == v["rules"]["wall"] == "INCONCLUSIVE"
+    assert v["rules"]["cost"] == "INCONCLUSIVE" and "wall" not in v["rules"]
+    assert v["wall_ratio"] is None
     assert v["cost_ratio"] is None
 
 

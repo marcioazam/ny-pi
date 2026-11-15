@@ -84,11 +84,35 @@ Decisão do dono; substitui a regra de acerto D6. Constantes em `bench/stats.py`
   A regra conta as repetições válidas de toda tarefa de segurança, também da que saiu do pareamento por erro de
   infraestrutura: uma falha ao lado de uma linha com erro fica pendente, e menos de 6 repetições válidas depois da
   extensão é confirmação incompleta (FAIL).
-- Custo e wall: mediana das razões por tarefa (PR ÷ base), limites 1,10 e 1,20. A razão entre duas medianas mudava
+- Custo e turnos: mediana das razões por tarefa (PR ÷ base), limite 1,10 cada. Turnos = idas ao modelo (média das repetições com dado, só tarefas com dado nos dois lados); sem dado é INCONCLUSIVE e não muda o veredito. O tempo de relógio (wall) é publicado, mas não reprova. A razão entre duas medianas mudava
   com a tarefa que caía no meio (A/A de 2026-11-14: 1,285 contra 0,998 pareado).
 - Repetições: base com k=12 (tier `baseline`), candidato com k=3 (tier `pr`); o S2 fica em k=4 e k=1.
 - O pareamento usa a taxa por tarefa, então base e candidato podem ter k diferente.
-- Custo (razão das medianas até 1,10), tempo (até 1,20) e segurança não mudaram.
+- Custo (até 1,10) e segurança não mudaram; ver a troca da regra de tempo abaixo.
+
+### Regra de tempo trocada por turnos (2026-11-15)
+
+- Contrato antigo: a mediana das razões pareadas de wall acima de 1,20 contra a rodada gravada às 4h reprovava.
+- Contrato novo: a razão pareada de turnos acima de 1,10 reprova (bloqueia como o custo); wall continua em `wall_ratio`,
+  na pontuação D7 e no resumo, só como informação.
+- Evidência medida em 2026-11-15: a regra de tempo media a API e a carga da máquina, não o PR.
+
+| observação | resultado |
+| --- | --- |
+| seis gates no mesmo dia, cinco de PRs sem mudança no harness | razão de wall 1,046; 1,120; 1,060; 1,101; 1,204 (FAIL); 1,271 (FAIL) |
+| mesmo commit medido de novo 25 min depois (S1) | 1,12 (antes 1,49) |
+| decomposição nas suítes S4/S5 | 97% do tempo é espera do modelo; API cerca de 10% menos tokens/s de dia que às 4h |
+| tempo local (início do processo e ferramentas, 3% do total) | dobrou com outras sessões na máquina |
+| razão de turnos | 1,000 em todos os gates |
+
+- Fontes: rustc-perf usa contagem de instruções "because it has the least variation"; CodSpeed: "Walltime measures
+  elapsed time, so it inherits the noise of the machine it runs on". Gate com substituto determinístico; relógio só em
+  A/B intercalado na mesma máquina.
+- Lacuna conhecida (pendência): a sobrecarga local (início do processo, hooks, ferramentas) deixa de ser coberta pelo
+  gate até existir a checagem de latência sem modelo (API falsa, base e PR intercalados na mesma máquina).
+- Cobertura da regra de turnos: a rodada de referência atual só tem turnos em S4 e S5 (22 das 42 tarefas). O S1
+  passa a gravar turnos e tokens a partir desta mudança e entra na regra quando a referência for regravada; o S2
+  (Harbor) não tem o dado. Até lá, as outras 20 tarefas ficam só com a regra de custo, que cobre as 42.
 
 Medição que justificou a troca (simulação sobre a rodada real do ny-pi, 42 tarefas):
 
