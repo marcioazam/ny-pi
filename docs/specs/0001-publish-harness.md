@@ -15,7 +15,7 @@ Requisitos: R1 nenhum segredo/dado pessoal no repo; R2 só o escopo core escolhi
 - D4 CLAUDE.md, rules e rules-ref reescritos neutros (inglês); o contrato pessoal vai para `claude-home/rules/personal.md`, local e não rastreado.
 - D5 Terceiros (ponytail, pi-lsp, sol-pi, claude-red, pr-review-toolkit, ralph-loop, egm, impeccable) via manifesto pinado por commit; o install aborta em divergência.
 - D6 MIT + NOTICE dos terceiros.
-- D7 Extensões: gates/fluxo, UI (+themes, claude-hud statusline), cache (prefix-cache-1h, cache-prefix-probe). Ficam fora google-only-agy e antigravity-bridge; o bloco de patch do agy no wrapper fica condicional.
+- D7 Extensões: gates/fluxo, UI (+themes, claude-hud statusline), cache (prefix-cache-1h, cache-prefix-probe).
 - D8 Wrapper público com bypass OFF por padrão; o usuário liga em `~/.pi/agent/local.env`.
 - D9 GitHub privado primeiro; o usuário revisa e muda para público.
 - D10 Todos os hooks e todo o `claude-home/bin` (evals e port-agents generalizados com caminhos configuráveis); só os docs de referência; os 17 commands.
@@ -37,7 +37,7 @@ Requisitos: R1 nenhum segredo/dado pessoal no repo; R2 só o escopo core escolhi
 - AC9: WHEN o repo é criado no GitHub THE SYSTEM SHALL criá-lo privado, e só o usuário muda a visibilidade.
 
 ## Não-objetivos
-Fork do código-fonte do pi; publicar o overlay pessoal, as sessões e a memória; suporte a Antigravity; release no npm; mudar o `~/.claude`.
+Fork do código-fonte do pi; publicar o overlay pessoal, as sessões e a memória; release no npm; mudar o `~/.claude`.
 
 ## Fase 0 — Segurança do estado atual (gate: backup verificado)
 1. Backup completo e registro /docs
@@ -52,7 +52,7 @@ Fork do código-fonte do pi; publicar o overlay pessoal, as sessões e a memóri
 2. publish.list e cópia por allowlist
 - agente: swarm-worker (Sonnet); arquivos: `~/code/pi-harness/publish.list`, `scripts/export.sh`, árvore copiada
 - ler antes: o inventário de D2/D3/D7/D10; `~/.local/bin/pi`; `~/.pi/agent/settings.json`
-- ação: gerar a lista arquivo a arquivo (sem `__pycache__`, `usage-cache*`, `pi-transcripts`, `config.json` do hud se tiver dados, `*.bak*`, `orig/`); `export.sh` copia só os itens da lista, mapeando `~/.local/bin/pi`→`bin/pi`, `claude-home/*`→`claude-home/*`, `extensions/*`, `themes/*`, `scripts/*`, `patches/{pi-code,pi-core}` (antigravity fora)
+- ação: gerar a lista arquivo a arquivo (sem `__pycache__`, `usage-cache*`, `pi-transcripts`, `config.json` do hud se tiver dados, `*.bak*`, `orig/`); `export.sh` copia só os itens da lista, mapeando `~/.local/bin/pi`→`bin/pi`, `claude-home/*`→`claude-home/*`, `extensions/*`, `themes/*`, `scripts/*`, `patches/{pi-code,pi-core}`
 - after: 1; AC2
 - check: `scripts/export.sh --dry-run | rg -c '/(sessions|checkpoints|memory|plans|projects|backups|session-env)/|auth|\.env|mcp\.json$|lsp\.json$|models-store'` = 0
 - pronto: a árvore existe sem `.git`, e só com arquivos da lista
@@ -87,8 +87,8 @@ Fork do código-fonte do pi; publicar o overlay pessoal, as sessões e a memóri
 
 ## Fase 2 — Instalador e wrapper (gate: AC3/AC4/AC7 em HOME temporário)
 7. Wrapper, local.env e templates
-- agente: swarm-worker (Sonnet); arquivos: `bin/pi`, `settings.json.example` (packages sem antigravity), `mcp.json.example` (placeholders `${ENV}`), `lsp.json.example`, `local.env.example`
-- ação: bypass default 0; parse de `local.env` linha a linha `KEY=VALUE` com allowlist de chaves e checagem de modo 0600, sem `source`; caminhos via `$HOME`; bloco agy só se o pacote existir
+- agente: swarm-worker (Sonnet); arquivos: `bin/pi`, `settings.json.example`, `mcp.json.example` (placeholders `${ENV}`), `lsp.json.example`, `local.env.example`
+- ação: bypass default 0; parse de `local.env` linha a linha `KEY=VALUE` com allowlist de chaves e checagem de modo 0600, sem `source`; caminhos via `$HOME`
 - after: 6; AC7, AC6
 - check: `sh bin/pi --selftest-env` com fixtures (0644 ignorado, chave estranha ignorada, `$(cmd)` literal)
 - pronto: os três casos passam
@@ -142,7 +142,7 @@ Fork do código-fonte do pi; publicar o overlay pessoal, as sessões e a memóri
 - `scripts/check-leaks.sh --tree && scripts/check-leaks.sh --history` (exit 0).
 - `git log --stat` e uma busca por nomes de projetos/clientes privados que a lista de identificadores não cobre.
 - Então: `gh repo edit <owner>/pi-harness --visibility public --accept-visibility-change-consequences`.
-- [DONE:2] `publish.list` (324 arquivos) + `scripts/export.sh`. Ajustes: `test_core.py` mantido (AWS key falsa de fixture → allowlist do gitleaks na tarefa 3); HUD antigravity mantido (import estático em `claude-hud-usage.mjs`; suporte a provider, sem conta). Check de paths: 2 falsos positivos aceitos (`test-author.md`, fixture `PostToolUse-mcp.json`).
+- [DONE:2] `publish.list` (324 arquivos) + `scripts/export.sh`. Ajustes: `test_core.py` mantido (AWS key falsa de fixture → allowlist do gitleaks na tarefa 3). Check de paths: 2 falsos positivos aceitos (`test-author.md`, fixture `PostToolUse-mcp.json`).
 - [DONE:3] `scripts/check-leaks.sh` (gitleaks 8.30.1 + trufflehog 3.99.9 pinado com sha256 + identificadores locais), `.githooks/pre-commit`, `.gitignore`, `.gitleaks.toml`, `.leak-allow`. Selftest verde. trufflehog exclui por path `test_core.py` (fixture AWS falsa; gitleaks cobre com allowlist exata).
 - [DONE:4] Sanitização: 0 hits fora de CLAUDE.md/rules-ref (tarefa 5). Novas envs: `PI_KNOWLEDGE_VAULT`, `PI_GRAPHS_VAULT` (sem default; substituem `IA_BRAIN_ROOT`/`IA_GRAPHS_ROOT`), `CLAUDE_SRC_DIR` (port-agents). git-deliver em `claude-home/bin/git-deliver`. Fixtures em `/tmp/pihome`. Testes: hooks 62 ok, telemetry+checks 13 ok.
 
@@ -252,8 +252,7 @@ Uncertain placements: pre-launch (generic mechanic kept public, owner-decision a
 - [DONE:6] `scripts/check-refs.py` (+11 testes) exit 0 (224 → 0). 14 skills genéricas adicionadas por A3 (publish.list 472). 49 referências marcadas `(optional)`; `refs-allow.txt` com 15 caminhos de runtime. Scanner ignora testes e `*.patch` (contexto de terceiros).
 - [DONE:7] `bin/pi` com bypass OFF, loader de `local.env` sem eval (allowlist de 7 chaves, 0600, env do chamador vence), patches fail-closed por versão (pi-code 1.7.0, pi 1.5.2); `bin/test_pi_env.sh` verde; templates `settings/mcp/lsp.json.example` e `local.env.example`. URLs de exa/context7 conferidas com a config real; perplexity/brave/playwright via npx oficiais (o dono usa gateway local; registrado como diferença).
 - [DONE:8] `install.sh` + `scripts/install-lib.sh`: pi 1.5.2 com layout gerenciado reproduzido e sha256 pinado (o `pi.dev/install.sh` oficial não fixa versão), `npm ci` com pi-code 1.7.0, terceiros por commit (ponytail ef8ca48, ralph-loop/pr-review-toolkit 893173f, claude-red a8de813 opcional; pi-lsp via npm 0.1.7 com integrity), patches `patches/third-party/*` fail-closed, `--link [--apply]`, `--restore`. Omitidos: sol-pi, egm, impeccable (proveniência não confirmada; não referenciados ou opcionais). `test_install.sh` verde, inclusive E2E com rede (15.7s).
-- Risco: `install.sh` (padrão) sobre o `~/.pi/agent` real remove o antigravity-bridge do `npm/` → na migração do dono só roda `--link`.
-- [DONE:9] Gate (gate-runner, árvore sem git): leaks/selftest/refs/structure(0 achados)/pytest hooks 62, bin 69, skills 327/node hud 50, cjs 65/patches 19 aplicam, 355 testes de patch/test_pi_env/test_install com E2E de rede: verdes após correções (2 patches novos do dia sincronizados, `orig/` do pi-code 1.7.0 incluído (MIT, idêntico ao npm pack), teste google-only-agy removido, testes resolvem pi-tui via `PI_AGENT_DIR`, `npm ci` das extensões no install, check 12 do pi-ui-final-gate por conteúdo). `git init` + `core.hooksPath .githooks`. Migração: `install.sh --link --apply` → 487 symlinks, manifesto `~/.pi-backup/20261113T181250/link-manifest.tsv`; overlay `rules/personal.md` + `local.env` (0600). Smoke real: `pi -p` exit 0, 54 agents e 200 skills (iguais ao backup), BYPASS=1, sem avisos no stderr. Re-dry-run: 487 skip(same).
+- [DONE:9] Gate (gate-runner, árvore sem git): leaks/selftest/refs/structure(0 achados)/pytest hooks 62, bin 69, skills 327/node hud 50, cjs 65/patches 19 aplicam, 355 testes de patch/test_pi_env/test_install com E2E de rede: verdes após correções (2 patches novos do dia sincronizados, `orig/` do pi-code 1.7.0 incluído (MIT, idêntico ao npm pack), testes resolvem pi-tui via `PI_AGENT_DIR`, `npm ci` das extensões no install, check 12 do pi-ui-final-gate por conteúdo). `git init` + `core.hooksPath .githooks`. Migração: `install.sh --link --apply` → 487 symlinks, manifesto `~/.pi-backup/20261113T181250/link-manifest.tsv`; overlay `rules/personal.md` + `local.env` (0600). Smoke real: `pi -p` exit 0, 54 agents e 200 skills (iguais ao backup), BYPASS=1, sem avisos no stderr. Re-dry-run: 487 skip(same).
 - Surprise/fix: `publish.list` tinha SRC `~/.claude/bin/git-deliver` e o `--link` usa SRC como destino → o link caiu no `~/.claude`. Restaurado do backup (sha256 OK), SRC corrigido para `~/.pi/agent/claude-home/bin/git-deliver` e manifesto ajustado.
 - Adicionado `claude-home/settings.json.example` (registro dos hooks com `$HOME`; o runner do pi-code usa shell-form) como template do install.
 - Fix (entrega): o guard do git-deliver (`secret_named`, padrão `*credentials*.json`) barrou `insecure-defaults/references/default-credentials.json` (regexes, não credencial). Renomeado para `default-credential-rules.json` com `SEED_FILES` (id→arquivo) em `pipeline.py`; o id da categoria ficou igual; testes 17/17.

@@ -281,8 +281,7 @@ O avaliador do /goal apontou os 29 avisos do `pi_harness_check`, o pi-code sem v
 - Texto: 9 linhas de proveniência (`~/.claude/agents/X.md` → "the Claude agent `X`"), `Explore`, `pente-fino` e 6
   skills (`agent-routing`, `context-economy`, `e2e`, `evidence-research`, `harness-audit`, `pelo-em-ovo`) sem caminho
   ou ferramenta do Claude; o mapeamento da `impeccable` e da `e2e` fica entre aspas.
-- Pins de pacote: `settings.json` fixa `npm:pi-code@1.7.0` e `npm:@3d24rd0/pi-antigravity-bridge@1.3.1` (as duas
-  últimas no npm, `npm view` em 2026-11-12). Motivo: os 8 patches do pi-code, o patch do bridge e os pins de
+- Pins de pacote: `settings.json` fixa `npm:pi-code@1.7.0` (a última no npm, `npm view` em 2026-11-12). Motivo: os 8 patches do pi-code, o patch do bridge e os pins de
   estrutura valem para uma versão; `pi update` agora não move os pacotes debaixo deles. O pi não reinstala: a versão
   instalada satisfaz a fixa (`package-manager.js` `installedNpmMatchesConfiguredVersion`). Para não perder versão
   nova, `~/.claude/bin/harness_currency.py` ganhou `pi_packages()` (lê os `npm:` do `settings.json` do pi) e os dois

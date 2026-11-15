@@ -95,12 +95,12 @@ sessão paralela editou `eval:cases/outcome.jsonl`. Resultado: 9 PASS, 3 FAIL.
 | catálogo de skills (80 visíveis; ~60 B/skill só de `<location>`) | 30.530 | 11.000 |
 | CLAUDE.md + safety.md | ~26.500 | 9.600 |
 | ferramentas (20) | 24.370 | 8.800 |
-|   AskAntigravity (177 chamadas no histórico; fica) | 5.306 | 1.900 |
 |   `mcp__keenable__search_web_pages` (direta) | 4.679 | 1.700 |
 |   subagent + question | 4.892 | 1.800 |
 | roster de agentes (54) | 7.798 | 2.800 |
 | ponytail (A/B: poupa mais do que custa) | ~5.000 | 1.800 |
 | base do pi (tools/rules/docs/mcp_servers) | ~4.700 | 1.700 |
+- (linha de um componente removido em 2026-11-15 foi retirada; os totais são os da época)
 - Alavancas restantes, que precisam de aprovação e de A/B de routing:
   - 41 das 80 skills visíveis tiveram ≤ 2 usos em ~2 meses (15,4 KB ≈ 5,5k tokens). Opção: ocultar as de uso nulo e
     agrupar famílias, como as 8 `gsap-*` (2,8 KB) atrás de uma entrada. Isso exige mudar a regra "skill oculta só
@@ -121,23 +121,15 @@ Não são redundantes; ficam.
   economiza ~US$ 0,18.
 - A remedição marcada para 2026-11-15 em `pi-memory-cache-sota-2026-11-13.md` (passo 6) decide com dados reais.
 
-### 4. Antigravity só com Google e Keenable sob demanda (pedido do usuário, 2026-11-13)
-- `~/.pi/agent/extensions/google-only-agy/index.ts`: fora de modelo Google (provider `antigravity`/`google*` ou id (optional)
-  `google/`/`gemini`), tira `AskAntigravity`, `antigravity` e `agy_*` do conjunto ativo em `session_start` e
-  `model_select`; com Google, devolve. O provider continua registrado, para o `/model` achar o Gemini.
-  `PI_AGY_TOOLS=always` volta ao antigo. Testes: `bin/tests/gates/google-only-agy.test.ts` (3/3).
+### 4. Keenable sob demanda (pedido do usuário, 2026-11-13)
 - `mcp.json`: Keenable sem `toolExposure` (todo diferido). O texto "Keenable é direta" saiu do CLAUDE.md,
   `providers.md`, `evidence-research`, `research-scout`, `soteiros-auditor`, `claim-verifier`, `web-scout` e do
   comentário do wrapper. Backups em `backups/preamble-diet-2026-11-13/*.pre-keenable` e `mcp.json.before`.
-- Medido (1ª requisição, `pi -p`, Haiku): 36.694 → 32.740 tokens (−10,8%); payload 101,7 → 90,9 KB.
-  Ferramentas ativas: Claude sem nenhuma agy; `antigravity/claude-opus-4-6-thinking-cli` com `AskAntigravity` e
-  `antigravity`; `PI_AGY_TOOLS=always` com as duas.
+- Medido (1ª requisição, `pi -p`, Haiku): 36.694 → 32.740 tokens (−10,8%); payload 101,7 → 90,9 KB (a medição
+  incluía outra mudança do mesmo dia, de um componente removido em 2026-11-15).
 - Smoke Keenable (Haiku): `tool_search`, depois `search_web_pages`, depois `fetch_page_content`; tudo OK.
 - Checagens: instructions 0 problemas, agents OK (54).
-- Efeito colateral aceito: "ask gemini" numa sessão Claude não tem mais a ferramenta; é preciso trocar para um modelo
-  Google ou usar `PI_AGY_TOOLS=always`.
-- Rollback: apagar a extensão; `cp backups/preamble-diet-2026-11-13/mcp.json.before ~/.pi/agent/mcp.json`; restaurar
-  os `*.pre-keenable`.
+- Rollback: `cp backups/preamble-diet-2026-11-13/mcp.json.before ~/.pi/agent/mcp.json`; restaurar os `*.pre-keenable`.
 
 ### 5. Hubs de skills (recomendação "versão segura", aprovada pelo usuário em 2026-11-13)
 - `gsap-core` virou hub das 7 `gsap-*`, e `emil-design-eng` virou hub de `review-animations` e `improve-animations`. As

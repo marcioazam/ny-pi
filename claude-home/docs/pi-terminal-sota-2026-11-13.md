@@ -20,7 +20,6 @@ Três `perplexity-scout` (Perplexity + Keenable, páginas lidas com `web_fetch`)
 | https://code.claude.com/docs/en/commands.md | `/keybindings`, `/code-review`, `/context`, `/usage`, `/rewind`, `/btw`, `/diff` |
 | https://learn.chatgpt.com/docs/developer-commands.md?surface=cli | Codex: Ctrl+R histórico, `/keymap`, `/diff`, Enter direciona e Tab enfileira, Esc Esc edita e bifurca |
 | https://learn.chatgpt.com/docs/config-file/config-reference.md | Codex `tui.keymap`, `tui.notifications`, `tui.terminal_title` |
-| https://antigravity.google/docs/features/ | `/diff` com comentários por linha que direcionam o agente; `/keybindings`; `/statusline` |
 | https://cursor.com/docs/cli/using | Ctrl+R revisa mudanças e `i` acrescenta instruções |
 | https://ampcode.com/docs/cli/keybindings | Ctrl+R histórico; Enter direciona; edição da fila |
 | https://opencode.ai/docs/keybinds/ | `prompt_stash`, leader key, which-key |
@@ -39,10 +38,10 @@ fullscreen, `/tree`, `/fork`, `/clone`, `/rewind`, `/context`, `/btw`, `/diff`, 
 |:-|:-|
 | Busca no histórico de prompts com Ctrl+R (Claude, Codex, Amp) | U1 |
 | Guardar o rascunho com Ctrl+S (Claude, OpenCode) e devolver o rascunho apagado por Ctrl+C (Claude) | U1 |
-| Comentários por linha no `/diff` que viram instrução ao agente (Antigravity, Cursor) | U2 |
+| Comentários por linha no `/diff` que viram instrução ao agente (Cursor) | U2 |
 | Tokyo Night em tudo: sintaxe e markdown no mapeamento oficial; `sticky-prompt` com cor fixa 256; HUD com laranja fixo `38;5;208` | U3 |
 | Copiar um bloco de código da última resposta (Claude `/copy` com seletor) | U4 `/copy-code [N]` |
-| Editar atalhos por comando (Claude `/keybindings`, Codex `/keymap`, Antigravity) | U4 `/keybindings` |
+| Editar atalhos por comando (Claude `/keybindings`, Codex `/keymap`) | U4 `/keybindings` |
 | Paleta de comandos (Amp, OpenCode), HUD compacto, som | fora: decisão do usuário |
 | Shell em segundo plano com `/shells` (Claude Ctrl+B, Gemini, Codex `/ps`) | fora: exigiria ferramenta nova fora do matcher `Bash` do `guard.py` e custo fixo de schema por turno; `nohup … &` já funciona pelo `bash` guardado |
 | Progresso OSC 9;4 na aba do kitty | fora: o template de aba do usuário (`kitty.conf:75`) não mostra progresso e o título já tem o spinner |

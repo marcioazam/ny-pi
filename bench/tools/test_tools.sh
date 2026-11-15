@@ -140,5 +140,13 @@ sha() { bash -c "set -euo pipefail; . '$here/../arms/overlay-sha.sh'; overlay_sh
 check "overlay: caminho ausente no fim da lista não derruba" sha "$T/ov.list" >/dev/null
 check "overlay: caminho ausente não muda o hash" test "$(sha "$T/ov.list")" = "$(sha "$T/ov2.list")"
 
+# --- frozen overlay: same hash as the source, and an edit to the source afterwards does not reach the copy
+frz() { bash -c "set -euo pipefail; . '$here/../arms/overlay-sha.sh'; overlay_freeze '$T/ov' '$T/frozen' '$T/ov.list'"; }
+h=$(frz)
+check "overlay congelado: mesmo hash da origem" test "$h" = "$(sha "$T/ov.list")"
+echo b >"$T/ov/settings.json"
+check "overlay congelado: edição na origem não muda a cópia" test "$(bash -c ". '$here/../arms/overlay-sha.sh'; overlay_sha '$T/frozen' '$T/ov.list'")" = "$h"
+check "overlay congelado: não sobrescreve cópia existente" bash -c "! (. '$here/../arms/overlay-sha.sh'; overlay_freeze '$T/ov' '$T/frozen' '$T/ov.list') 2>/dev/null"
+
 echo "falhas: $fails"
 exit $((fails > 0))

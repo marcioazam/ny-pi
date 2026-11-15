@@ -54,6 +54,6 @@ Só as linhas verificadas na fonte entram como base de decisão.
 | Kiro: "For quick, well-understood changes, skip planning and work directly with the default agent." | https://kiro.dev/docs/specs/plan/ | atalho T0 (D7) |
 | Confiança verbalizada é superconfiante e nenhuma técnica vence sempre (Xiong et al., ICLR 2024) | https://arxiv.org/abs/2306.13063 | D9 |
 | Cache: leitura a 0,1x, escrita de 5 min a 1,25x | https://platform.claude.com/docs/en/build-with-claude/prompt-caching | contexto injetado estável; revisão em contexto novo só em T3 (D8) |
-| Cursor (plano editável em markdown), Antigravity (comentário por passo), Claude Code `opusplan` | cursor.com/docs/agent/plan-mode, antigravity.google/docs/plan/, code.claude.com/docs/en/model-config | já coberto (arquivo de plano, pins por agente) |
+| Cursor (plano editável em markdown), Claude Code `opusplan` | cursor.com/docs/agent/plan-mode, code.claude.com/docs/en/model-config | já coberto (arquivo de plano, pins por agente) |
 
 Não verificado (só snippet; não usado como base): "plano ruim é pior que plano nenhum" (arXiv 2604.12147), RigorBench, Agent GPA, TQS, semáforo de confiança do Devin, DINCO, limite de 2.000 palavras por ExecPlan. Não encontrado: evidência de que planos mais longos melhoram o resultado; página oficial do plan mode do Codex.
