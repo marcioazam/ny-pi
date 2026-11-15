@@ -30,7 +30,7 @@ def _run(*targets):
         )
         counts = {"tests": 0, "failures": 0, "errors": 0, "skipped": 0}
         if report.is_file():
-            for suite in ET.parse(report).getroot().iter("testsuite"):
+            for suite in ET.parse(report).getroot().iter("testsuite"):  # nosemgrep
                 for key in counts:
                     counts[key] += int(suite.get(key, 0))
         return proc.returncode, counts, (proc.stdout + proc.stderr)[-1500:]
