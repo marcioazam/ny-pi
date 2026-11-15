@@ -171,6 +171,7 @@ def test_ny_pi_harbor_bundles_the_checkout_stage(
     stage = tmp_path / "stage"
     stage.mkdir()
     (stage / ".overlay-sha").write_text("abc")
+    (stage / ".ready").touch()
     hd = tmp_path / "hd"
     hd.mkdir()
     script(hd / "bundle.sh", f'echo "$HOME" > {tmp_path}/bundled_home\n')
@@ -255,6 +256,17 @@ def test_arm_info_and_overlay_sha(tmp_path: Path, monkeypatch: MP) -> None:
     stage.mkdir()
     (stage / ".overlay-sha").write_text("deadbeef\n")
     monkeypatch.setenv("BENCH_STAGE_ROOT", str(tmp_path))
+    # A build that failed halfway leaves .overlay-sha but no .ready: not a stage, and the round stops before any
+    # run (timer gate of 2026-11-15: 52 runs raced to rebuild it; NOT_VERIFIED came 20 minutes later).
+    assert rb.overlay_sha("abc123") is None
+    monkeypatch.setenv("BENCH_STAGE", str(stage))
+    arm = script(tmp_path / "arm", "echo 'install: ERROR: npm ci failed' >&2\nexit 1\n")
+    with pytest.raises(
+        RuntimeError, match="stage not built: install: ERROR: npm ci failed"
+    ):
+        rb.arm_meta("ny-pi", {"ny-pi": {}}, "pi", arm, "m", 1.0)
+    monkeypatch.delenv("BENCH_STAGE")
+    (stage / ".ready").touch()
     assert rb.overlay_sha("abc123") == "deadbeef"
     assert rb.overlay_sha("zzz") is None
     monkeypatch.setenv("BENCH_STAGE", str(stage))
@@ -331,6 +343,8 @@ def test_ny_pi_stage_default_is_outside_tmp() -> None:
     arm = (BENCH / "arms/ny-pi").read_text()
     assert "/tmp" not in next(ln for ln in arm.splitlines() if ln.startswith("stage="))
     assert "BENCH_STAGE_ROOT" in arm
+    # Version-manager shims resolve through $HOME; the arm pins them to the real HOME before staging one.
+    assert arm.index("MISE_DATA_DIR") < arm.index('if [ ! -f "$stage/.ready" ]')
 
 
 def two_suite_cfg(tmp_path: Path, n: int, k: int = 1) -> list[rb.Step]:

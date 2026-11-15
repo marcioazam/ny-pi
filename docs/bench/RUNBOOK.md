@@ -42,7 +42,8 @@ Pré-requisitos no PATH: `gh` autenticado como o dono do repositório, `git`, `j
 ## Fluxo do PR
 
 1. A cada 10 min `bench-pr.timer` chama `bench-pr.sh --poll`. Só entram PRs abertos do mesmo repositório e do dono;
-   forks e outros autores são ignorados, assim como heads que já têm `bench-pr` final (`success` ou `failure`).
+   forks e outros autores são ignorados, assim como heads que já têm `bench-pr` final (`success` ou `failure`) ou um
+   erro que gastou uma rodada (`NOT_COMPARABLE`, `NOT_VERIFIED`): esses esperam uma pessoa e só rerodam com `--pr N`.
 2. Para cada PR elegível: status `pending`; worktree descartável do head em `$BENCH_STATE/wt/<sha>` (clone próprio em
    `$BENCH_STATE/repo`); `bench run --arm ny-pi --tier pr --budget-usd 12` dentro dela; `bench gate` contra o baseline
    main; status final; worktree removida. O resumo completo vai como comentário no PR e fica em
@@ -166,6 +167,14 @@ echo 'BENCH_OVERLAY_DIR=<caminho da cópia>' >> ~/.config/ny-pi/bench.env
 
 A cópia contém segredos (`local.env`): fica fora do repositório, com modo 700. O gate mede as regras pessoais da
 data da cópia, não as do momento.
+
+O hash do overlay ordena os arquivos no locale C desde 2026-11-15. Antes seguia o locale de quem rodava, e o mesmo
+conteúdo dava `f6afa7d59fa0c8f8` em `en_US.UTF-8` e `c06e62526c0540fe` em C. O `meta.json` do baseline main foi
+regravado só nesse campo, sem nova rodada: a cópia congelada é a mesma (conferida pelos dois hashes).
+
+Se a montagem do stage falhar (por exemplo, `npm ci` do `install.sh`), a rodada para antes da primeira execução com
+`ny-pi stage not built: <erro>`; o stage só vale com `.ready`. O braço aponta os diretórios do mise para o HOME
+real, porque os shims recusam rodar sob o HOME do stage.
 
 ## Diagnóstico
 

@@ -161,6 +161,7 @@ def arm_meta(
     arm: str, arms: dict[str, Any], kind: str, bin_: Path, model: str, budget: float
 ) -> dict[str, Any]:
     ver = arms[arm].get("version", "")
+    err = ""
     try:
         p = subprocess.run(
             [str(bin_), "--version"],
@@ -171,8 +172,9 @@ def arm_meta(
         )
         if p.returncode == 0 and p.stdout.strip():
             ver = p.stdout.strip().splitlines()[0]
-    except (OSError, subprocess.TimeoutExpired):
-        pass
+        err = p.stderr.strip()[-400:]
+    except (OSError, subprocess.TimeoutExpired) as e:
+        err = str(e)
     sha = subprocess.run(
         ["git", "-C", str(REPO), "rev-parse", "HEAD"],
         capture_output=True,
@@ -185,6 +187,10 @@ def arm_meta(
     }  # fmt: skip
     if arm == "ny-pi":
         meta["overlay_sha"] = overlay_sha(sha[:12])
+        if meta["overlay_sha"] is None:
+            # The --version call above builds the stage. Without a complete one every parallel run would try to
+            # rebuild it at once and the round would end not_verified much later (timer gate, 2026-11-15).
+            raise RuntimeError(f"ny-pi stage not built: {err or 'no .ready'}")
     return meta
 
 
@@ -194,12 +200,20 @@ def stage_root() -> Path:
 
 
 def nypi_stage(short: str) -> Path | None:
-    """The ny-pi stage built from this checkout (arms/ny-pi), identified by its .overlay-sha."""
+    """The ny-pi stage built from this checkout (arms/ny-pi), identified by its .overlay-sha. Only a complete
+    one counts (.ready): a build that failed halfway leaves .overlay-sha behind."""
     stage = os.environ.get("BENCH_STAGE")
     cands = (
         [Path(stage)] if stage else sorted(stage_root().glob(f"bench-nypi-{short}*"))
     )
-    return next((c for c in reversed(cands) if (c / ".overlay-sha").exists()), None)
+    return next(
+        (
+            c
+            for c in reversed(cands)
+            if (c / ".ready").exists() and (c / ".overlay-sha").exists()
+        ),
+        None,
+    )
 
 
 def overlay_sha(short: str) -> str | None:
