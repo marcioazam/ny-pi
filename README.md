@@ -1,9 +1,9 @@
 # ny-pi
 
-A measured harness for the [pi](https://github.com/earendil-works/pi) coding agent: it solved the most tasks of the
-three harnesses tested here and cost less than Claude Code on both suites, and a benchmark gate on every pull request
-keeps it that way.
-Wrapper, extensions, hooks, skills, agents and an installer.
+A harness for the [pi](https://github.com/earendil-works/pi) coding agent (wrapper, extensions, hooks, skills, agents
+and an installer), measured against Claude Code and plain pi with the same model and the same tasks.
+In short: it costs less than Claude Code and solves more tasks than plain pi; it has not been shown to solve more than
+Claude Code, and it costs more than plain pi. Both sides are below.
 
 [![ci-static](../../actions/workflows/ci-static.yml/badge.svg)](../../actions/workflows/ci-static.yml)
 [![ci-security](../../actions/workflows/ci-security.yml/badge.svg)](../../actions/workflows/ci-security.yml)
@@ -17,20 +17,47 @@ Formerly `pi-harness` (renamed 2026-11-14); runtime identifiers keep the old nam
 
 ## Contents
 
-- [Why ny-pi](#why-ny-pi) · [Results at a glance](#results-at-a-glance) · [Benchmarks](#benchmarks)
+- [How to read this README](#how-to-read-this-readme) · [Wins and losses](#where-ny-pi-wins-and-where-it-loses) ·
+  [Results at a glance](#results-at-a-glance) · [Benchmarks](#benchmarks)
 - [What you get](#what-you-get) · [Install](#install) · [Configuration](#configuration)
 - [Quality gates](#quality-gates) · [Comparison](#comparison-with-other-harnesses) · [Community](#community)
 - [Repository layout](#repository-layout) · [Documentation](#documentation) · [License](#license)
 
-## Why ny-pi
+## How to read this README
 
-- **Accurate:** 97.8% of 42 tasks solved, against 94.0% for plain pi (+3.8 points, 90% interval +1.2 to +10.5).
-- **Cheaper than Claude Code:** 0.57x the cost per task on the 42 tasks, 0.82x on the harder multi-file suite.
-- **Measured, not claimed:** every extension carries its reason and measurement; every pull request is benchmarked
-  against a frozen round of `main`.
-- **Safe by default:** permission bypass is off, a guard hook keeps an always-deny list, and the installer fails
-  closed on any hash mismatch.
-- **Reversible:** each extension is one directory; deleting it removes the feature.
+This README follows one rule: it reports the data as measured, losses next to wins, with no marketing.
+
+- Every claim about quality, cost or speed points to a measurement in this repository (raw runs under
+  [`docs/bench/`](docs/bench/)), with the sample size and the interval.
+- Where ny-pi loses, it says so in the same place it says where it wins.
+- A difference whose interval crosses zero is reported as "not shown", never as a win.
+- What was not measured is said to be not measured; features are not compared with other harnesses.
+- When a new measurement contradicts a number here, the number is replaced, not kept beside a newer one.
+
+Pull requests that change this README follow the same rule ([CONTRIBUTING](CONTRIBUTING.md)).
+
+## Where ny-pi wins and where it loses
+
+Same model (Claude Sonnet 5.5) for every harness, results of 2026-11-15.
+
+| Against | ny-pi wins | ny-pi loses | Not shown either way |
+|---|---|---|---|
+| pi 1.5.2, no harness | Solves more of the 42 tasks: +3.8 points (90% interval +1.2 to +10.5) | Costs more: 1.23x per task on the 42 tasks, about 1.2x on the harder suite. Takes more turns on the harder suite (6.2 against 5.6 per run; no interval computed). Answers later: first reply at 2.3 to 2.6 s against 1.1 to 1.6 s in a one-turn timing of 3 runs per arm, from the larger fixed prompt (local timing, not yet in `docs/bench/`) | Harder suite accuracy: 36 of 36 against 34 of 36, too few failures to resolve |
+| Claude Code, no configuration | Costs less: 0.57x per task on the 42 tasks, 0.82x on the harder suite (90% interval 0.73 to 0.91). Fewer turns on the harder suite (6.2 against 6.6; no interval computed) | Nothing measured so far | Accuracy: +2.6 points on the 42 tasks with an interval of -1.4 to +9.9 (crosses zero); tie at 36 of 36 on the harder suite |
+
+Known weaknesses that are not in the tables:
+
+- The guard hook does not recognise every indirect shell form: some destructive commands wrapped in a subshell,
+  `bash -c`, `xargs` or `find -exec` pass its always-deny list (independent audit of 2026-11-15; a fix is prepared and
+  not yet merged). Treat it as a guard against mistakes, not as a sandbox.
+- Leaving plan mode turns permission bypass on in a session that started in safe mode (by design in
+  `extensions/bypass-permissions`, not yet reflected in the safety documentation).
+- Wall-clock time is not gated (it depended on API and machine load); the local start-up and hook overhead is not
+  measured by any check yet.
+- Both task sets are close to saturated, one model and one machine were used, the tasks are mostly Python, and no
+  task was solved by ny-pi alone. Claude Code has 2 repetitions on the 42 tasks against 12 for the other two.
+- A Terminal-Bench 2.0 sample of 24 tasks, registered before running, is the next accuracy measurement; until it is
+  published, nothing here supports "more accurate than Claude Code".
 
 ## Results at a glance
 
@@ -38,9 +65,9 @@ Same model (Claude Sonnet 5.5) for every harness, results of 2026-11-15.
 
 | Suite | ny-pi | pi 1.5.2, no harness | Claude Code, no configuration |
 |---|---|---|---|
-| 42 tasks: solved | **97.8%** | 94.0% | 95.2% |
+| 42 tasks: solved | 97.8% | 94.0% | 95.2% |
 | 42 tasks: cost per solved task | US$ 0.047 | US$ 0.040 | US$ 0.085 |
-| 12 harder tasks (36 runs): solved | **36 of 36** | 34 of 36 | 36 of 36 |
+| 12 harder tasks (36 runs): solved | 36 of 36 | 34 of 36 | 36 of 36 |
 | 12 harder tasks: cost per solved task | US$ 0.178 | US$ 0.156 | US$ 0.219 |
 
 ## Benchmarks
@@ -51,7 +78,7 @@ Same model for every harness (Claude Sonnet 5.5), same 42 tasks, results of 2026
 
 | Harness | Tasks solved | Cost per task | Cost per solved task | Repetitions |
 |---|---|---|---|---|
-| **ny-pi** (this repository) | **97.8%** | US$ 0.046 | US$ 0.047 | 12 |
+| ny-pi (this repository) | 97.8% | US$ 0.046 | US$ 0.047 | 12 |
 | pi 1.5.2, no harness | 94.0% | US$ 0.038 | US$ 0.040 | 12 |
 | Claude Code, no configuration | 95.2% | US$ 0.081 | US$ 0.085 | 2 |
 
@@ -72,7 +99,7 @@ long and wide work), hidden tests, 3 repetitions each, same model, results of 20
 
 | Harness | Tasks solved | Cost per solved task | Turns per run |
 |---|---|---|---|
-| **ny-pi** | 36 of 36 | US$ 0.178 | 6.2 |
+| ny-pi | 36 of 36 | US$ 0.178 | 6.2 |
 | Claude Code, no configuration | 36 of 36 | US$ 0.219 | 6.6 |
 | pi 1.5.2, no harness | 34 of 36 | US$ 0.156 | 5.6 |
 
@@ -92,8 +119,8 @@ long and wide work), hidden tests, 3 repetitions each, same model, results of 20
 | 12 harder tasks | US$ 0.178 | US$ 0.219 | US$ 0.156 | 0.82x (90% interval 0.73 to 0.91) |
 
 Plain pi is the cheapest per task: ny-pi spends 23% more on the 42 tasks (a larger fixed prompt, read from cache on
-every turn) and about 1.2x on the harder suite, and buys accuracy on the first and a large saving against Claude
-Code on both.
+every turn) and about 1.2x on the harder suite. What that buys: more tasks solved than plain pi on the 42 tasks, and
+a lower cost than Claude Code on both suites.
 
 ### What the numbers do not show
 
@@ -142,8 +169,10 @@ Both spend model tokens (the budget flag caps it) and need the credentials descr
 | Agents and skills | 17 agents and 30 skills under `claude-home/`, loaded on demand; 17 slash commands |
 | Interface | Sticky last prompt, queued-message recall, footer, sound on turn end, themes |
 
-Each extension is one directory or file under [`extensions/`](extensions/), with its reason, measurement and
-how to revert in the header comment. Deleting the directory removes the feature.
+Each extension is one directory or file under [`extensions/`](extensions/), with its reason in the header comment;
+deleting it removes the feature. Not every extension has been measured on its own: the benchmark measures the
+harness as a whole, and per-extension measurements exist for a few (the output cut, the prompt cache, the
+unattended-run block), recorded in [`docs/bench/`](docs/bench/).
 
 ## Install
 
@@ -218,14 +247,15 @@ Only what is measured here: same model, same tasks, results of 2026-11-15.
 
 | | ny-pi | Claude Code, no configuration | pi 1.5.2, no harness |
 |---|---|---|---|
-| Tasks solved (42 tasks) | **97.8%** | 95.2% | 94.0% |
+| Tasks solved (42 tasks) | 97.8% | 95.2% | 94.0% |
 | Tasks solved (12 harder tasks, 36 runs) | 36 of 36 | 36 of 36 | 34 of 36 |
 | Cost per solved task (42 tasks) | US$ 0.047 | US$ 0.085 | US$ 0.040 |
 | Cost per solved task (harder) | US$ 0.178 | US$ 0.219 | US$ 0.156 |
 | Turns per run (harder) | 6.2 | 6.6 | 5.6 |
 
-Plain pi is cheaper and takes fewer turns; ny-pi solves more on the 42 tasks. Claude Code costs more per solved task
-on both suites. Features that were not measured are not compared.
+Plain pi is cheaper and takes fewer turns; ny-pi solves more than plain pi on the 42 tasks, and more than Claude Code
+has not been shown. Claude Code costs more per solved task on both suites. Features that were not measured are not
+compared.
 
 ## Community
 
