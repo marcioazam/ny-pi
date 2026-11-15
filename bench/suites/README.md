@@ -1,4 +1,4 @@
-# Suítes S4 (plan) e S5 (multi)
+# Suítes S4 (plan), S5 (multi) e S8 (hard)
 
 Avaliam o repositório ny-pi (braço `ny-pi`) contra as referências vanilla. Neutras de capacidade: medem o resultado (testes ocultos), nunca o formato de plano ou o uso de subagentes.
 Plano e decisões: `docs/bench/pi-harness-ci-2026-11-13.md` (D10, D11, D14).
@@ -7,6 +7,11 @@ Plano e decisões: `docs/bench/pi-harness-ci-2026-11-13.md` (D10, D11, D14).
   (pedido ambíguo ou contraditório). O prompt começa com `Planeje antes de implementar.`.
 - `multi/`: 10 casos `outcome` com 3 módulos independentes cada, testes ocultos por módulo; o prompt diz que o
   trabalho é paralelizável.
+- `hard/`: 8 casos `outcome` em repositórios de 20 a 40 arquivos, com `docs/SPEC.md` de regras numeradas e
+  testes visíveis que passam no estado inicial. Três temas: bug longe do sintoma, mudança transversal com
+  muitas regras, trabalho longo e largo. Existe porque S4 e S5 saturaram (todos os braços acima de 90%).
+  Roda só sob demanda (`--tier hard`), fora do gate de PR. Tudo que os testes ocultos exigem está no prompt
+  ou no SPEC.
 
 ## Contrato de caso
 
@@ -14,7 +19,7 @@ Plano e decisões: `docs/bench/pi-harness-ci-2026-11-13.md` (D10, D11, D14).
 
 | Item | Conteúdo |
 |---|---|
-| `case.json` | `id`, `suite` (`plan`/`multi`), `kind` (`outcome`/`ask`), `prompt`, `timeout_s` (<=900), `budget_usd` (<=1.5), `split` (`dev`/`heldout`), `security` (false), `test_cmd`, `ask_terms` (só `ask`) |
+| `case.json` | `id`, `suite` (`plan`/`multi`/`hard`), `kind` (`outcome`/`ask`), `prompt`, `timeout_s` (<=900), `budget_usd` (<=1.5), `split` (`dev`/`heldout`), `security` (false), `test_cmd`, `ask_terms` (só `ask`) |
 | `repo/` | estado inicial (Python stdlib); vira o cwd do agente |
 | `hidden/` | testes pytest copiados para `<workdir>/hidden` só após o agente terminar (`outcome`) |
 | `oracle/` | arquivos que, copiados sobre `repo/`, fazem `hidden/` passar (`outcome`) |
@@ -29,7 +34,7 @@ Held-out (D14): 30% de cada suíte, `sorted(ids)` + `random.Random(20261113).sam
 ## Verificar
 
 ```bash
-python3 bench/suites/check_oracles.py [--suite plan|multi] [--case ID]
+python3 bench/suites/check_oracles.py [--suite plan|multi|hard] [--case ID]
 python3 -m pytest bench/suites -q -p no:cacheprovider
 ```
 

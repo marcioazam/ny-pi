@@ -97,6 +97,21 @@ A regra nova custa cerca de 146 execuções por PR.
 - Um baseline antigo (k=2) ainda carrega no gate, mas o intervalo fica mais largo e a taxa de aprovação medida acima
   não vale para ele.
 
+## Tier hard (sob demanda)
+
+- Suíte `s8` (`bench/suites/hard`, contrato em `bench/suites/README.md`): tarefas que não saturam, para comparar
+  harnesses e medir partes do harness (ablações). Nunca entra no tier `pr`: o tempo e o custo do gate não mudam.
+- Rodar, um braço por vez, na mesma máquina e com o mesmo `--jobs`:
+  `python3 bench/run.py run --arm <braço> --tier hard --model <modelo> --budget-usd <teto> --jobs 6 --out <dir>`.
+  Segure a trava do gate para não disputar a máquina com o `bench-pr`: prefixe com `flock "${BENCH_STATE:-$HOME/.local/state/bench}/lock"`.
+- Comparar: `python3 bench/run.py scoreboard --ny <dir do ny-pi> --refs <dir de cada referência>`.
+- Regra de leitura, fixada antes de rodar: nenhuma tarefa sai por causa do resultado (só por defeito da tarefa
+  provado sem olhar o braço); "superior em acerto" só com o limite inferior do IC90 pareado acima de zero;
+  "não inferior" com o limite acima de -10 pp; fora disso, "inconclusivo".
+- Caso novo: escreva `repo/`, `hidden/`, `oracle/` e `case.json`, rode
+  `python3 bench/suites/check_oracles.py --suite hard`; ele diz quais casos passam a ser held-out (30%, semente
+  fixa) e exige que os testes ocultos falhem no estado inicial e passem com o oracle.
+
 ## Placar do objetivo
 
 `python3 bench/run.py scoreboard --ny <rodada ny-pi> --refs <rodada> [<rodada> ...] [--out arquivo.md]` imprime o
