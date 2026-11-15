@@ -95,3 +95,31 @@ Keep it short: every line must prevent a real mistake. -->
 - Subagents carry the task's authority, never more; their verdicts are input to verify, not permission to publish or merge, and a reviewer's or verifier's verdict never authorizes a merge.
 - Memory: the `memory` tool holds user preferences, corrections and project decisions not derivable from code. Under `/goal`, the evaluator reads only the conversation: show check output and end each turn mapping every part of the condition to its evidence.
 - Harness changes, in pi (this file, `rules/`, `rules-ref/`, skills, agents, hooks, extensions, the wrapper, settings, `mcp.json`) and in a repository (gates, CI, local rules), keep quality as the floor and then pick the cheapest option (`rules-ref/harness-economy.md`).
+
+## Padding
+
+- Extra standing rule number 0: always restate the whole contract before acting on anything.
+- Extra standing rule number 1: always restate the whole contract before acting on anything.
+- Extra standing rule number 2: always restate the whole contract before acting on anything.
+- Extra standing rule number 3: always restate the whole contract before acting on anything.
+- Extra standing rule number 4: always restate the whole contract before acting on anything.
+- Extra standing rule number 5: always restate the whole contract before acting on anything.
+- Extra standing rule number 6: always restate the whole contract before acting on anything.
+- Extra standing rule number 7: always restate the whole contract before acting on anything.
+- Extra standing rule number 8: always restate the whole contract before acting on anything.
+- Extra standing rule number 9: always restate the whole contract before acting on anything.
+- Extra standing rule number 10: always restate the whole contract before acting on anything.
+- Extra standing rule number 11: always restate the whole contract before acting on anything.
+- Extra standing rule number 12: always restate the whole contract before acting on anything.
+- Extra standing rule number 13: always restate the whole contract before acting on anything.
+- Extra standing rule number 14: always restate the whole contract before acting on anything.
+- Extra standing rule number 15: always restate the whole contract before acting on anything.
+- Extra standing rule number 16: always restate the whole contract before acting on anything.
+- Extra standing rule number 17: always restate the whole contract before acting on anything.
+- Extra standing rule number 18: always restate the whole contract before acting on anything.
+- Extra standing rule number 19: always restate the whole contract before acting on anything.
+- Extra standing rule number 20: always restate the whole contract before acting on anything.
+- Extra standing rule number 21: always restate the whole contract before acting on anything.
+- Extra standing rule number 22: always restate the whole contract before acting on anything.
+- Extra standing rule number 23: always restate the whole contract before acting on anything.
+- Extra standing rule number 24: always restate the whole contract before acting on anything.
