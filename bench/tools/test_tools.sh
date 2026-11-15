@@ -132,5 +132,13 @@ check "vanilla roda os 2 braços com US\$5 cada" test "$(grep -c -- '--tier vani
 check "vanilla imprime comando de report" grep -q 'bench/run.py report --runs .* --out docs/bench/BASELINE-VANILLA-' <<<"$out"
 check "vanilla não sobrescreve" bash -c "! bash '$here/vanilla-retest.sh' --budget-usd 10 >/dev/null 2>&1"
 
+# --- overlay hash: a listed path that is absent (last entry included) is skipped, not a failure
+mkdir -p "$T/ov" && echo a >"$T/ov/settings.json"
+printf '# c\nsettings.json\nmissing/config.json\n' >"$T/ov.list"
+printf 'settings.json\n' >"$T/ov2.list"
+sha() { bash -c "set -euo pipefail; . '$here/../arms/overlay-sha.sh'; overlay_sha '$T/ov' '$1'"; }
+check "overlay: caminho ausente no fim da lista não derruba" sha "$T/ov.list" >/dev/null
+check "overlay: caminho ausente não muda o hash" test "$(sha "$T/ov.list")" = "$(sha "$T/ov2.list")"
+
 echo "falhas: $fails"
 exit $((fails > 0))

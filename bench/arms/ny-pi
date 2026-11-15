@@ -8,6 +8,8 @@ here=$(dirname "$(readlink -f "$0")")
 repo=$(cd "$here/../.." && pwd)
 # shellcheck source=bench/arms/oauth-token.sh
 . "$here/oauth-token.sh"
+# shellcheck source=bench/arms/overlay-sha.sh
+. "$here/overlay-sha.sh"
 real=${BENCH_REAL_HOME:-$HOME}
 stage=${BENCH_STAGE:-${BENCH_STAGE_ROOT:-$real/.cache/bench}/bench-nypi-$(git -C "$repo" rev-parse --short=12 HEAD)$(git -C "$repo" diff --quiet HEAD || echo -dirty)}
 if [ ! -f "$stage/.ready" ]; then
@@ -25,8 +27,7 @@ if [ ! -f "$stage/.ready" ]; then
     [ -e "$real/.pi/agent/$rel" ] || continue
     mkdir -p "$(dirname "$stage/.pi/agent/$rel")" && cp -a "$real/.pi/agent/$rel" "$stage/.pi/agent/$rel"
   done <"$here/overlay.list"
-  (cd "$stage/.pi/agent" && grep -v -e '^#' -e '^$' "$here/overlay.list" | while read -r rel; do [ -e "$rel" ] && find -L "$rel" -type f -print0; done |
-    sort -z | xargs -0 -r sha256sum | sha256sum | cut -c1-16) >"$stage/.overlay-sha"
+  overlay_sha "$stage/.pi/agent" "$here/overlay.list" >"$stage/.overlay-sha"
   HOME=$stage bash "$repo/install.sh" --link --apply >/dev/null
   # Warm-up: bin/pi applies its patches at start; a first real run on an unpatched tree crashed at exit (2026-11-13).
   HOME=$stage "$stage/.local/bin/pi" --version >/dev/null
