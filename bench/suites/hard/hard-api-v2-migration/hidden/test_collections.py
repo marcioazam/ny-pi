@@ -67,7 +67,6 @@ def test_r11_summarize_and_aging():
         by_priority={"low": 1, "normal": 0, "high": 3, "urgent": 1},
         open_by_tier={"standard": 2, "gold": 1, "enterprise": 1},
     )
-    assert list(s.by_priority) == ["low", "normal", "high", "urgent"]
     assert summarize([]).to_dict() == {
         "total": 0,
         "by_status": {"open": 0, "pending": 0, "resolved": 0, "closed": 0},

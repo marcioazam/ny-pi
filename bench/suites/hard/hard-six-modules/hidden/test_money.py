@@ -19,12 +19,11 @@ def test_parse_money_formas():
         "USD 12.5": Money(1250, "USD"),
         "USD 12": Money(1200, "USD"),
         "USD -5.00": Money(-500, "USD"),
-        "  JPY   1,500 ": Money(1500, "JPY"),
+        "JPY 1,500": Money(1500, "JPY"),
         "KWD 1.5": Money(1500, "KWD"),
         "1,234,567.89 EUR": Money(123456789, "EUR"),
         "BRL 0.05": Money(5, "BRL"),
         "USD -0": Money(0, "USD"),
-        "USD 007.1": Money(710, "USD"),
     }
     for texto, esperado in casos.items():
         assert parse_money(texto) == esperado, texto

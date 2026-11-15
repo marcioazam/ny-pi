@@ -12,9 +12,14 @@ Plano e decisões: `docs/bench/pi-harness-ci-2026-11-13.md` (D10, D11, D14).
   visíveis falhando, e a tarefa é separar defeito de código de teste errado). Três temas: bug longe do sintoma, mudança transversal com
   muitas regras, trabalho longo e largo. Existe porque S4 e S5 saturaram (todos os braços acima de 90%).
   Roda só sob demanda (`--tier hard`), fora do gate de PR. Tudo que os testes ocultos exigem está no prompt
-  ou no SPEC: um teste oculto que cobra mais do que o texto pede é defeito da tarefa (três foram achados e
-  corrigidos em 2026-11-15 lendo as falhas: proibição da palavra `legacy` em comentário, "uma única chamada"
-  onde o SPEC diz "só esses agregados", tipo de retorno que o SPEC não fixa).
+  ou no SPEC: um teste oculto que cobra mais do que o texto pede é defeito da tarefa. Em 2026-11-15 foram
+  corrigidos 23 pontos assim em 9 casos: 3 achados lendo as falhas e 20 numa auditoria independente de cada
+  asserção contra o prompt e o SPEC (por exemplo: proibição da palavra `legacy` em comentário, "uma única
+  chamada" onde o SPEC diz "só esses agregados", tipo de retorno, nome de dia e recuo que o SPEC não fixa,
+  ordem de chaves, atributo interno). Cada correção só afrouxa o que o texto não pede; o oracle passa e o
+  repositório inicial falha em todos os casos.
+  Limite medido: com Sonnet 5.5 a suíte também saturou em acerto (ny-pi e Claude Code 36 de 36, pi puro 34 de
+  36), então ela separa custo, turnos e tempo, não acerto.
 
 ## Contrato de caso
 

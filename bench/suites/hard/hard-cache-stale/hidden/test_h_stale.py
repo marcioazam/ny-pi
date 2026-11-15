@@ -137,7 +137,7 @@ def test_compact_leaves_only_valid_entries():
     c.invalidate_entity("t1", "price", "stale")
     compact(c)
     assert len(c) == 1 and c.get(K("t2", "ok")) == 3
-    assert c.stats.purged == 1
+    assert c.snapshot_stats()["purged"] == 1
 
 
 def test_counters_released_only_for_groups_without_entries():
@@ -169,7 +169,7 @@ def test_eviction_drops_oldest_valid_after_purge():
     c.max_entries = 1
     compact(c)
     assert len(c) == 1 and c.get(K(i="c")) == "c"
-    assert c.stats.evicted == 1
+    assert c.snapshot_stats()["evicted"] == 1
 
 
 def test_snapshot_stats_keys():

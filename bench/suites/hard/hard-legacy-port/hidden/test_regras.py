@@ -193,7 +193,7 @@ def test_frete_nao_importa_legacy():
     for arq in (RAIZ / "frete").rglob("*.py"):
         for no in ast.walk(ast.parse(arq.read_text(encoding="utf-8"))):
             mods = [a.name for a in no.names] if isinstance(no, ast.Import) else []
-            if isinstance(no, ast.ImportFrom):
+            if isinstance(no, ast.ImportFrom) and no.level == 0:
                 mods = [no.module or ""]
             assert not any(m == "legacy" or m.startswith("legacy.") for m in mods), arq
 

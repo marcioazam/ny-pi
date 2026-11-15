@@ -108,7 +108,10 @@ def test_cli_lists_only_real_errors(tmp_path, capsys):
     path.write_bytes(b'a = "abc\nxs = [\n  1,\n]\nb = @\n')
     assert main([str(path)]) == 1
     lines = capsys.readouterr().out.strip().splitlines()
-    assert [ln.rsplit(": ", 1)[0] for ln in lines] == ["1:5: E_STRING", "5:5: E_CHAR"]
+    assert [ln.split(": ", 2)[:2] for ln in lines] == [
+        ["1:5", "E_STRING"],
+        ["5:5", "E_CHAR"],
+    ]
 
 
 # --- regras vizinhas que o conserto não pode quebrar ---

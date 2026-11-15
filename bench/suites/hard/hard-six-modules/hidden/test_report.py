@@ -72,7 +72,12 @@ def test_selecao_ordem_e_normalizacao():
         "b/y.txt",
     ]
     assert linhas[0] == "Release x 0.1.0" and linhas[2] == "Compatible: none"
-    assert linhas[-1] == "Total: 3 files, 119 bytes, 1m 1s 500ms, USD 1.03"
+    assert linhas[
+        -1
+    ] in (  # B5 não fixa: soma dos custos por arquivo, ou taxa × duração total
+        "Total: 3 files, 119 bytes, 1m 1s 500ms, USD 1.03",
+        "Total: 3 files, 119 bytes, 1m 1s 500ms, USD 1.02",
+    )
     assert [l.rsplit(" | ", 1)[1] for l in linhas[6:9]] == [
         "USD 0.01",
         "USD 1.00",

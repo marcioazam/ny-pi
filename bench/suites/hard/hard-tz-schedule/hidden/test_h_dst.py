@@ -190,4 +190,9 @@ def test_same_instant_sorted_by_series_id():
 
 def test_text_after_dst():
     text = week_text([rec("a", count=3, duration_min=30)], NY, date(2024, 3, 11))
-    assert text.splitlines()[:2] == ["Mon 2024-03-11 total=30m", "  09:00 A 30m"]
+    cab, entrada = text.splitlines()[:2]
+    assert cab.split()[1:] == [
+        "2024-03-11",
+        "total=30m",
+    ]  # o nome do dia não é fixado pela regra 14
+    assert entrada.split() == ["09:00", "A", "30m"]

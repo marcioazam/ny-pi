@@ -99,8 +99,10 @@ A regra nova custa cerca de 146 execuções por PR.
 
 ## Tier hard (sob demanda)
 
-- Suíte `s8` (`bench/suites/hard`, contrato em `bench/suites/README.md`): tarefas que não saturam, para comparar
-  harnesses e medir partes do harness (ablações). Nunca entra no tier `pr`: o tempo e o custo do gate não mudam.
+- Suíte `s8` (`bench/suites/hard`, contrato em `bench/suites/README.md`): tarefas de vários arquivos, para
+  comparar harnesses e medir partes do harness (ablações). Nunca entra no tier `pr`: o tempo e o custo do gate
+  não mudam. Com Sonnet 5.5 ela saturou em acerto (2026-11-15: ny-pi e Claude Code 36 de 36, pi puro 34 de 36):
+  serve para custo, turnos e tempo; diferença de acerto pede tarefas em que o modelo erra.
 - Rodar, um braço por vez, na mesma máquina e com o mesmo `--jobs`:
   `python3 bench/run.py run --arm <braço> --tier hard --model <modelo> --budget-usd <teto> --jobs 6 --out <dir>`.
   Segure a trava do gate para não disputar a máquina com o `bench-pr`: prefixe com `flock "${BENCH_STATE:-$HOME/.local/state/bench}/lock"`.
@@ -113,7 +115,12 @@ A regra nova custa cerca de 146 execuções por PR.
 - Toda execução falha é lida (`artifacts/*.test.out`): se o teste oculto cobra algo que nem o prompt nem o SPEC
   pedem, o defeito é da tarefa. Corrija o teste (não o SPEC, para não mudar o que o agente leu) e repontue as
   execuções já feitas a partir do `.diff` guardado: repositório inicial + diff + testes ocultos. Confira antes que
-  o método reproduz o resultado gravado com os testes antigos.
+  o método reproduz o resultado gravado com os testes antigos. Antes de aceitar uma suíte nova, um revisor que
+  não escreveu os casos confere cada asserção oculta contra o prompt e o SPEC.
+- Custo entre braços: compare a razão por tarefa (média geométrica com intervalo), não a soma. Com `--jobs 6`
+  as seis primeiras execuções gravam o prefixo em cache ao mesmo tempo (cerca de US$ 0,3 a 0,4 por rodada do
+  ny-pi, qualquer que seja o tamanho); ao comparar rodadas de tamanhos diferentes, desconte a gravação do
+  primeiro turno.
 - Caso novo: escreva `repo/`, `hidden/`, `oracle/` e `case.json`, rode
   `python3 bench/suites/check_oracles.py --suite hard`; ele diz quais casos passam a ser held-out (30%, semente
   fixa) e exige que os testes ocultos falhem no estado inicial e passem com o oracle.

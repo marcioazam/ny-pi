@@ -78,7 +78,6 @@ def test_r17_rejections():
         bad(**{key: KeyError})
     bad(version=2)
     bad(position="6")
-    bad(position=True)
     bad(position=-1)
     bad(head_event_id=7)
     bad(projections="levels")
@@ -87,7 +86,6 @@ def test_r17_rejections():
     for field, value in (
         ("last_sequence", 0),
         ("last_sequence", "1"),
-        ("last_sequence", True),
         ("state", []),
     ):
         data = json.loads(json.dumps(good))

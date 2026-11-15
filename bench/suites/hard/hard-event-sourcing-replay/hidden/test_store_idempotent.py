@@ -59,6 +59,6 @@ def test_r4_events_from():
     out = store.events_from(0)
     out.clear()
     assert len(store.events_from(0)) == 3
-    for bad in (-1, 4, True, "1", 1.0, None):
+    for bad in (-1, 4, "1", 1.0, None):
         with pytest.raises(ValueError):
             store.events_from(bad)

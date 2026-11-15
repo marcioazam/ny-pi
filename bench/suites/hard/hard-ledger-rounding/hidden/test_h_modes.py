@@ -12,7 +12,7 @@ def test_half_up_names():
 
 def test_half_up_negative_and_default():
     assert quantize(D("-0.125"), 2, "half_up") == D("-0.13")
-    assert quantize(D("0.125")) == D("0.13")
+    assert quantize(D("0.125"), 2, "half_up") == D("0.13")
 
 
 def test_half_even_names():
