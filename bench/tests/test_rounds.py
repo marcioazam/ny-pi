@@ -491,3 +491,34 @@ def test_evidence_signatures_and_per_run_records(
     assert gaps.count("  - signature: ") == 3 and "  - signature: no-change" in gaps
     assert "| ny-pi@m | 1 | 10.0 | 20.0 | 30.0 | 40.0 | 4.0 | 1.0 | 80.0 |" in text
     assert "| pi-vanilla@m | 1 | 1.0 | 2.0 | 3.0 | 4.0 | 1.0 | 0.0 | 8.0 |" in text
+
+
+def test_gate_base_not_verified_is_not_verified(
+    tmp_path: Path, monkeypatch: MP
+) -> None:
+    """D5: only the candidate's flag was read."""
+    monkeypatch.setattr(bg, "changed_paths", lambda *_: [])
+    base = write_round(tmp_path / "b", tasks(6), not_verified=True)
+    v, _, code = bg.gate(base, write_round(tmp_path / "c", tasks(6)))
+    assert v["verdict"] == "NOT_VERIFIED" and code == 5
+
+
+def test_gate_security_extension_with_only_infra_rows_fails(
+    tmp_path: Path, monkeypatch: MP
+) -> None:
+    """D2: pending security task whose extension returns only infrastructure errors is a regression."""
+    monkeypatch.setattr(bg, "changed_paths", lambda *_: [])
+    sec = [mk("sec1", r, r > 0, security=True) for r in range(3)]  # rep 0 fails
+    b = [mk("sec1", r, True, security=True) for r in range(2)] + tasks(20)
+    base = write_round(tmp_path / "b", b)
+    cand = write_round(tmp_path / "c", sec + tasks(20))
+    line = json.dumps(mk("sec1", 3, False, cost=None, security=True))
+    v, _, code = bg.gate(base, cand, f"echo '{line}' >> \"$BENCH_EXTEND_OUT\"")
+    assert v["security_regressions"] == ["sec1"] and code == 1
+
+
+def test_suite_row_leaves_infra_rows_out_of_the_rate() -> None:
+    """D7: an infrastructure error is no agent failure."""
+    runs = [mk("a", 0, True), mk("b", 0, True), mk("c", 0, False, cost=None)]
+    x = rp.suite_row(runs)
+    assert x["rate"] == 1.0 and x["errors"] == 1 and x["runs"] == 3

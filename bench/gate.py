@@ -115,7 +115,7 @@ def gate(
             c_runs = [r for r in c_runs if r["task_id"] not in refused]
         extended = True
         v = run_verdict(True)
-    if c_meta.get("not_verified"):
+    if b_meta.get("not_verified") or c_meta.get("not_verified"):
         v["verdict"] = "NOT_VERIFIED"  # AC6: budget stop is never a pass
     held_b = [r for r in b_runs if r.get("split") == "heldout"]
     held_c = [r for r in c_runs if r.get("split") == "heldout"]

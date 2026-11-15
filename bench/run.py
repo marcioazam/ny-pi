@@ -355,18 +355,24 @@ def execute(
             meta["not_verified"] = True
             return
         rs: list[dict[str, Any]] = []
+        planned, stage_err = (
+            False,
+            None,
+        )  # planned: the stage had units to run; zero rows then is no result
         if s["kind"] == "internal":
             reps = runners.s1_case_reps(s["tasks"], s["k"])
             todo = [
                 t for t in s["tasks"]
                 if not all((s["suite"], t, i) in done for i in range(reps[t]))
             ]  # fmt: skip
+            planned = bool(todo)
             if todo:
                 rs, err = runners.run_s1(
                     kind, bin_, todo, s["k"], model, left, f"bench-{arm}-{tier}", {},
                     max(2, jobs),
                 )  # fmt: skip
                 if err:
+                    stage_err = err
                     meta["errors"].append(f"s1: {err}")
                 rs = fresh(rs)
             save(rs)
@@ -382,6 +388,7 @@ def execute(
                 (c, rep) for c in s["cases"] for rep in range(s["k"])
                 if (s["suite"], c["id"], rep) not in done
             ]  # fmt: skip
+            planned = bool(units)
 
             def one(u: tuple[dict[str, Any], int]) -> dict[str, Any]:
                 r = runners.run_case(
@@ -402,6 +409,10 @@ def execute(
                     break
                 with ThreadPoolExecutor(jobs) as ex:
                     rs += list(ex.map(one, units[i : i + jobs]))
+        if planned and (stage_err or not rs):
+            meta["not_verified"] = True  # an empty or failed stage proves nothing
+            if not rs:
+                meta["errors"].append(f"{s['suite']}: stage returned no runs")
         bad = sum(1 for r in rs if r.get("error"))
         if rs and bad / len(rs) > MAX_ERROR_SHARE:
             # quota (429), auth, disk or sandbox failures are no score: stop before the next stage
