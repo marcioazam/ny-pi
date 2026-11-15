@@ -95,7 +95,7 @@ def test_r10_late_event_refolds_only_that_aggregate():
     )
     store.aggregate_reads.clear()
     state = replay_from(store, snap)
-    assert store.aggregate_reads == ["sku:A"]
+    assert set(store.aggregate_reads) == {"sku:A"}
     assert state["sku:A"]["levels"]["on_hand"] == 101
     assert state == replay_all(store)
 

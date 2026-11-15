@@ -248,6 +248,10 @@ def test_r21_ledger():
     assert led.total("USD") == by["USD"] and led.total("EUR") == D("100.00")
 
 
+def _valor(x):
+    return getattr(x, "amount", x)
+
+
 def test_r21_total_in_converts_each_currency_once():
     svc = make_service()
     for _ in range(3):
@@ -256,14 +260,14 @@ def test_r21_total_in_converts_each_currency_once():
     t.add_rate("EUR", "USD", "1.005", D1)
     sums = svc.ledger.totals_by_currency()
     assert sums == {"EUR": D("21.00")}
-    assert svc.ledger.total_in("USD", t, D1) == D(
+    assert _valor(svc.ledger.total_in("USD", t, D1)) == D(
         "21.11"
     )  # 21.105 meio para cima; por pedido seria 21.12
     cart = Cart()
     cart.add(Product("U", "U", "1.00"))
     svc.checkout(cart, "TAX-FREE")
-    assert svc.ledger.total_in("USD", t, D1) == D("21.11") + D("8.50")
-    assert svc.ledger.total_in("EUR", t, D1) == D("21.00") + D(
+    assert _valor(svc.ledger.total_in("USD", t, D1)) == D("21.11") + D("8.50")
+    assert _valor(svc.ledger.total_in("EUR", t, D1)) == D("21.00") + D(
         "8.46"
     )  # 8.50 / 1.005 = 8.457
     with pytest.raises(RateNotFoundError):

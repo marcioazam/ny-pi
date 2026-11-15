@@ -108,6 +108,12 @@ A regra nova custa cerca de 146 execuções por PR.
 - Regra de leitura, fixada antes de rodar: nenhuma tarefa sai por causa do resultado (só por defeito da tarefa
   provado sem olhar o braço); "superior em acerto" só com o limite inferior do IC90 pareado acima de zero;
   "não inferior" com o limite acima de -10 pp; fora disso, "inconclusivo".
+- Braços comparados: `ny-pi`, `pi-vanilla` e `cc-vanilla` (decisão do dono em 2026-11-15: o `omp` saiu das
+  medições, dos placares e dos relatórios; os dados antigos dele ficam só como histórico).
+- Toda execução falha é lida (`artifacts/*.test.out`): se o teste oculto cobra algo que nem o prompt nem o SPEC
+  pedem, o defeito é da tarefa. Corrija o teste (não o SPEC, para não mudar o que o agente leu) e repontue as
+  execuções já feitas a partir do `.diff` guardado: repositório inicial + diff + testes ocultos. Confira antes que
+  o método reproduz o resultado gravado com os testes antigos.
 - Caso novo: escreva `repo/`, `hidden/`, `oracle/` e `case.json`, rode
   `python3 bench/suites/check_oracles.py --suite hard`; ele diz quais casos passam a ser held-out (30%, semente
   fixa) e exige que os testes ocultos falhem no estado inicial e passem com o oracle.

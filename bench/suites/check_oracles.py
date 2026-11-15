@@ -23,7 +23,7 @@ SUITES = ("plan", "multi", "hard")
 KINDS = ("outcome", "ask")
 SEED = 20261113
 HELDOUT_SHARE = 0.3
-MIN_CASES = {"plan": 12, "multi": 10, "hard": 8}
+MIN_CASES = {"plan": 12, "multi": 10, "hard": 12}
 PLAN_PREFIX = "Planeje antes de implementar."
 RUN_TIMEOUT_S = 180
 

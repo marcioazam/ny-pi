@@ -7,11 +7,14 @@ Plano e decisões: `docs/bench/pi-harness-ci-2026-11-13.md` (D10, D11, D14).
   (pedido ambíguo ou contraditório). O prompt começa com `Planeje antes de implementar.`.
 - `multi/`: 10 casos `outcome` com 3 módulos independentes cada, testes ocultos por módulo; o prompt diz que o
   trabalho é paralelizável.
-- `hard/`: 8 casos `outcome` em repositórios de 20 a 40 arquivos, com `docs/SPEC.md` de regras numeradas e
-  testes visíveis que passam no estado inicial. Três temas: bug longe do sintoma, mudança transversal com
+- `hard/`: 12 casos `outcome` em repositórios de 20 a 40 arquivos, com `docs/SPEC.md` de regras numeradas e
+  testes visíveis que passam no estado inicial (exceção de propósito: `hard-test-triage` começa com 12 testes
+  visíveis falhando, e a tarefa é separar defeito de código de teste errado). Três temas: bug longe do sintoma, mudança transversal com
   muitas regras, trabalho longo e largo. Existe porque S4 e S5 saturaram (todos os braços acima de 90%).
   Roda só sob demanda (`--tier hard`), fora do gate de PR. Tudo que os testes ocultos exigem está no prompt
-  ou no SPEC.
+  ou no SPEC: um teste oculto que cobra mais do que o texto pede é defeito da tarefa (três foram achados e
+  corrigidos em 2026-11-15 lendo as falhas: proibição da palavra `legacy` em comentário, "uma única chamada"
+  onde o SPEC diz "só esses agregados", tipo de retorno que o SPEC não fixa).
 
 ## Contrato de caso
 

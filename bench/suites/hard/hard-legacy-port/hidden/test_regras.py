@@ -1,5 +1,6 @@
 """Validação, ordem das verificações, estado por instância, modelos e entradas/saídas de texto."""
 
+import ast
 import dataclasses
 import subprocess
 import sys
@@ -190,7 +191,11 @@ def test_frete_nao_importa_legacy():
     codigo = "import sys, frete; sys.exit(1 if any(m == 'legacy' or m.startswith('legacy.') for m in sys.modules) else 0)"
     assert subprocess.run([sys.executable, "-c", codigo], cwd=RAIZ).returncode == 0  # noqa: PLW1510
     for arq in (RAIZ / "frete").rglob("*.py"):
-        assert "legacy" not in arq.read_text(encoding="utf-8"), arq
+        for no in ast.walk(ast.parse(arq.read_text(encoding="utf-8"))):
+            mods = [a.name for a in no.names] if isinstance(no, ast.Import) else []
+            if isinstance(no, ast.ImportFrom):
+                mods = [no.module or ""]
+            assert not any(m == "legacy" or m.startswith("legacy.") for m in mods), arq
 
 
 def test_formata_moeda():
