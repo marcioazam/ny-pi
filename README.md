@@ -63,12 +63,12 @@ Known weaknesses that are not in the tables:
 
 Same model (Claude Sonnet 5.5) for every harness, results of 2026-11-15.
 
-| Suite | ny-pi | pi 1.5.2, no harness | Claude Code, no configuration |
+| Suite | **ny-pi** | pi 1.5.2, no harness | Claude Code, no configuration |
 |---|---|---|---|
-| 42 tasks: solved | 97.8% | 94.0% | 95.2% |
-| 42 tasks: cost per solved task | US$ 0.047 | US$ 0.040 | US$ 0.085 |
-| 12 harder tasks (36 runs): solved | 36 of 36 | 34 of 36 | 36 of 36 |
-| 12 harder tasks: cost per solved task | US$ 0.178 | US$ 0.156 | US$ 0.219 |
+| 42 tasks: solved | **97.8%** | 94.0% | 95.2% |
+| 42 tasks: cost per solved task | **US$ 0.047** | US$ 0.040 | US$ 0.085 |
+| 12 harder tasks (36 runs): solved | **36 of 36** | 34 of 36 | 36 of 36 |
+| 12 harder tasks: cost per solved task | **US$ 0.178** | US$ 0.156 | US$ 0.219 |
 
 ## Benchmarks
 
@@ -78,7 +78,7 @@ Same model for every harness (Claude Sonnet 5.5), same 42 tasks, results of 2026
 
 | Harness | Tasks solved | Cost per task | Cost per solved task | Repetitions |
 |---|---|---|---|---|
-| ny-pi (this repository) | 97.8% | US$ 0.046 | US$ 0.047 | 12 |
+| **ny-pi (this repository)** | **97.8%** | **US$ 0.046** | **US$ 0.047** | **12** |
 | pi 1.5.2, no harness | 94.0% | US$ 0.038 | US$ 0.040 | 12 |
 | Claude Code, no configuration | 95.2% | US$ 0.081 | US$ 0.085 | 2 |
 
@@ -99,7 +99,7 @@ long and wide work), hidden tests, 3 repetitions each, same model, results of 20
 
 | Harness | Tasks solved | Cost per solved task | Turns per run |
 |---|---|---|---|
-| ny-pi | 36 of 36 | US$ 0.178 | 6.2 |
+| **ny-pi** | **36 of 36** | **US$ 0.178** | **6.2** |
 | Claude Code, no configuration | 36 of 36 | US$ 0.219 | 6.6 |
 | pi 1.5.2, no harness | 34 of 36 | US$ 0.156 | 5.6 |
 
@@ -113,10 +113,10 @@ long and wide work), hidden tests, 3 repetitions each, same model, results of 20
 
 ### Cost per solved task
 
-| Suite | ny-pi | Claude Code | pi, no harness | ny-pi vs Claude Code |
+| Suite | **ny-pi** | Claude Code | pi, no harness | ny-pi vs Claude Code |
 |---|---|---|---|---|
-| 42 tasks | US$ 0.047 | US$ 0.085 | US$ 0.040 | 0.57x per task (paired) |
-| 12 harder tasks | US$ 0.178 | US$ 0.219 | US$ 0.156 | 0.82x (90% interval 0.73 to 0.91) |
+| 42 tasks | **US$ 0.047** | US$ 0.085 | US$ 0.040 | 0.57x per task (paired) |
+| 12 harder tasks | **US$ 0.178** | US$ 0.219 | US$ 0.156 | 0.82x (90% interval 0.73 to 0.91) |
 
 Plain pi is the cheapest per task: ny-pi spends 23% more on the 42 tasks (a larger fixed prompt, read from cache on
 every turn) and about 1.2x on the harder suite. What that buys: more tasks solved than plain pi on the 42 tasks, and
@@ -245,13 +245,13 @@ The same checks run locally with `bash scripts/ci/local.sh` (under 15 minutes; [
 
 Only what is measured here: same model, same tasks, results of 2026-11-15.
 
-| | ny-pi | Claude Code, no configuration | pi 1.5.2, no harness |
+| | **ny-pi** | Claude Code, no configuration | pi 1.5.2, no harness |
 |---|---|---|---|
-| Tasks solved (42 tasks) | 97.8% | 95.2% | 94.0% |
-| Tasks solved (12 harder tasks, 36 runs) | 36 of 36 | 36 of 36 | 34 of 36 |
-| Cost per solved task (42 tasks) | US$ 0.047 | US$ 0.085 | US$ 0.040 |
-| Cost per solved task (harder) | US$ 0.178 | US$ 0.219 | US$ 0.156 |
-| Turns per run (harder) | 6.2 | 6.6 | 5.6 |
+| Tasks solved (42 tasks) | **97.8%** | 95.2% | 94.0% |
+| Tasks solved (12 harder tasks, 36 runs) | **36 of 36** | 36 of 36 | 34 of 36 |
+| Cost per solved task (42 tasks) | **US$ 0.047** | US$ 0.085 | US$ 0.040 |
+| Cost per solved task (harder) | **US$ 0.178** | US$ 0.219 | US$ 0.156 |
+| Turns per run (harder) | **6.2** | 6.6 | 5.6 |
 
 Plain pi is cheaper and takes fewer turns; ny-pi solves more than plain pi on the 42 tasks, and more than Claude Code
 has not been shown. Claude Code costs more per solved task on both suites. Features that were not measured are not
