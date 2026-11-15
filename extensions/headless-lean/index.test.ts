@@ -89,12 +89,7 @@ test('headlessTools tira question sempre e plan_mode_complete fora do modo plano
   ]) {
     assert.deepEqual(headlessTools(active, argv), ['read', 'plan_mode_complete', 'bash', 'lsp_hover', 'codemode'])
   }
-  assert.deepEqual(headlessTools(active, ['-p', '/planeta', '--planner']), [
-    'read',
-    'bash',
-    'lsp_hover',
-    'codemode',
-  ])
+  assert.deepEqual(headlessTools(active, ['-p', '/planeta', '--planner']), ['read', 'bash', 'lsp_hover', 'codemode'])
 })
 
 test('rewriteResult troca só os dois becos sem saída', () => {
