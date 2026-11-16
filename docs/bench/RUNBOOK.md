@@ -39,6 +39,9 @@ Pré-requisitos no PATH: `gh` autenticado como o dono do repositório, `git`, `j
 | `BENCH_JOBS` | não | paralelismo da rodada (default 4); tem de ser igual ao `jobs` do `baseline-main` (hoje 6), senão o gate dá NOT_COMPARABLE |
 | `BENCH_PR_BUDGET` | não | teto em US$ da rodada de PR (default 12) |
 
+O token OAuth da conta de benchmark só é renovado entre braços, nunca durante um braço: a renovação revoga o token que os contêineres em execução copiaram (2026-11-16: 5 execuções do braço Claude Code com 401 "OAuth token revoked").
+Braços ny-pi podem rodar em paralelo: cada rodada grava o próprio pacote em `<out>/pi-harness-bundle.tgz`.
+
 ## Fluxo do PR
 
 1. A cada 10 min `bench-pr.timer` chama `bench-pr.sh --poll`. Só entram PRs abertos do mesmo repositório e do dono;

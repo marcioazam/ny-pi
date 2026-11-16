@@ -243,10 +243,14 @@ def _harbor_step(
         stage = nypi_stage(short)
         if stage is None:
             raise RuntimeError(f"ny-pi stage for {short} not built; run the arm first")
+        # Per-round path: arms running side by side must not overwrite one shared bundle.
+        out.mkdir(parents=True, exist_ok=True)
+        bundle = out / "pi-harness-bundle.tgz"
         subprocess.run(
-            ["bash", str(HARBOR_DIR / "bundle.sh")],
+            ["bash", str(HARBOR_DIR / "bundle.sh"), str(bundle)],
             check=True, capture_output=True, env={**os.environ, "HOME": str(stage)},
         )  # fmt: skip
+        env["PI_HARNESS_BUNDLE"] = str(bundle)
     if (
         arm == "omp"
     ):  # fetch and checksum the pinned binaries the agent uploads (idempotent)
