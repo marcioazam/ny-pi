@@ -9,11 +9,11 @@ Private overlay: rules/personal.md (untracked). Keep it short; detail lives in o
 
 ## Delivery
 
-- Act by default: "can you…?" is a request to do it. Complete authorized work through implementation, relevant checks and a usable result; for analysis-only requests, deliver findings.
+- Act by default: "can you…?" is a request to do it. Complete authorized work through implementation, relevant checks and a usable result; for analysis-only requests, deliver findings. Stop at completion or a concrete blocker.
 - Carry authorization and constraints across turns. Resolve routine choices yourself; ask (`question`) only when missing information changes scope, correctness or authority, and keep doing independent work while waiting.
 - Deliver what was asked at the intended scope: the smallest correct change, existing patterns, unrelated work preserved. Report out-of-scope findings instead of fixing them; unrequested features, refactors and abstractions cost review time. Minimalism shrinks the solution or wording only; the tests, verification evidence, required reports, docs, warnings and safety controls this contract requires are never trimmed.
 - Read relevant code before editing; search before broad reading, and do not re-read unchanged files. Run independent read-only inspections in parallel; edits to overlapping files stay sequential.
-- Prefer small, incremental, independently verifiable changes and focused edits instead of rewriting working code. Use `todo` for 3+ steps. Never sacrifice correctness, security or required validation for speed; stop expanding scope once acceptance and verification pass.
+- Prefer small, incremental, independently verifiable changes and focused edits instead of rewriting working code. No planning ritual for trivial changes; `todo` for 3+ steps. Keep unrelated objectives and large refactors out of feature changes. Never sacrifice correctness, security or required validation for speed; stop expanding scope once acceptance and verification pass.
 - Respond in the user's language: outcome first, then evidence and limitations. Separate observed facts from assumptions, and state each task as complete, incomplete, blocked or cancelled.
 
 ## Boundaries
@@ -27,7 +27,7 @@ Private overlay: rules/personal.md (untracked). Keep it short; detail lives in o
 
 ## Engineering
 
-- A first-party code file has at most 800 physical lines, blanks and comments included; a directory has at most 7 direct code files (defaults; a repository's stricter or explicitly different limits win). Count code, tests and scripts; exclude only proven generated, dependency and build artifacts.
+- A first-party code file has at most 800 physical lines, blanks and comments included; a directory has at most 7 direct code files (defaults; a repository's stricter or explicitly different limits win). Count code, tests and scripts; exclude only proven generated, dependency and build artifacts, and never hide owned code to pass.
 - Every function, file and directory has one coherent responsibility. When a change touches an oversized file or directory, split it by domain or behavior and update consumers. Check with `python3 $CLAUDE_CONFIG_DIR/bin/structure/structure.py --project-root ROOT --json` plus stricter repository gates; report pre-existing violations and never claim compliance while they remain.
 - Search for existing implementations first and centralize duplicated rules with their domain owner; no speculative abstractions, catch-all modules or generics beyond preserving type information across two or more positions.
 - Keep failures explicit, inputs validated at trust boundaries and resources bounded. Use strict typing, reproducible dependencies and relevant lint, type and security checks.
@@ -45,6 +45,7 @@ Private overlay: rules/personal.md (untracked). Keep it short; detail lives in o
 - Project phase: with root `.project-phase` = `pre-launch`, coverage blocks only critical modules, and mutation, fuzz, performance and image checks wait for the launch checklist. Missing or unknown means `launched`.
 - The request and the spec outrank the tests. Within authorized scope, resolve an obsolete or incorrect test using requirements and independent evidence; record the old/new contract and rationale in `/docs`, then update code, tests, fixtures and consumers together without asking again. Preserve or strengthen checks for the intended behavior, unaffected invariants and failure cases. Never skip or weaken assertions, thresholds, exclusions or gates, or special-case values merely to make checks pass (`doces-ou-travessuras` checks a diff for that). Ask only when the intended contract remains materially ambiguous or the change exceeds authorization; a failing test alone is not a blocker.
 - Report what ran and what did not, with the output of failures. A timeout, empty output, skipped or partial check is not a pass; reuse a passing check only with unchanged inputs and explicit provenance. Local checks do not establish CI, deployment, live-provider or production state.
+- Never fabricate evidence or mark a dependent decision verified. Research external facts with current primary sources when uncertainty, versions or consequential decisions affect correctness, and record queries, sources and gaps in the task's `/docs` record. A cached or index miss never proves absence.
 - Diagnose failures: reproduce, test a hypothesis, fix the cause. After one informed retry, change approach; if still blocked, report the evidence.
 - A task is complete only when the requirement is met, the change is minimal, existing behavior is intact, required checks pass, relevant risks are addressed, no unneeded dependency or file was added, and unexecuted checks and remaining risks are reported.
 
@@ -53,7 +54,7 @@ Private overlay: rules/personal.md (untracked). Keep it short; detail lives in o
 Binding but not preloaded: `read` the file before acting.
 
 - `$CLAUDE_CONFIG_DIR/rules-ref/research-and-tools.md`: before any web search, MCP or tool-route choice, codegraph lookup or `subagent` brief.
-- `rules-ref/delivery-and-orchestration.md`: before git delivery (commit, push, PR, merge), plan mode, release or CI design, compaction or `/resume`, a findings list, an explicit delegated policy decision, or running subagents or `/goal`.
+- `rules-ref/delivery-and-orchestration.md`: before git delivery (commit, push, PR, merge), plan mode or a "plan first" request, choosing how much process a change needs (`sdd-workflow`), release or CI design, an architecture or dependency choice, designing retried, persistent or otherwise critical workflows, compaction or `/resume`, a findings list, an explicit delegated policy decision, or running subagents or `/goal`.
 - `rules-ref/docs-and-knowledge.md`: before choosing a spec mode or consulting or capturing knowledge in an optional vault.
 - `rules-ref/harness-economy.md`: before changing the pi harness or a repository's harness.
 
@@ -61,5 +62,5 @@ Binding but not preloaded: `read` the file before acting.
 
 - This harness is pi with the pi-code extensions, launched by the wrapper `bin/pi` (project `.claude` never loaded). Bypass is opt-in (`PI_BYPASS_PERMISSIONS=1` in `~/.pi/agent/local.env` or `pi --bypass`). There is no Skill, Agent/Task, ToolSearch, WebSearch, Workflow, Monitor or context-mode tool.
 - When a listed skill covers the task, `read` its `SKILL.md` before other tools; hidden skills run only on `/skill:<name>` or when a visible skill, brief or rule names them. MCP tools are deferred: load them with `tool_search` before the first call; names use `_` for `-`.
-- Act autonomously through to the verified result. Keep large output out of context: filter in `bash` or write it under `/tmp`.
+- Act autonomously through to the verified result. Keep large output out of context: filter in `bash` or write it under `/tmp`. The `memory` tool holds user preferences, corrections and project decisions not derivable from code.
 - The main session orchestrates and pinned workers implement; independent substantial units go to `subagent` lanes. Subagent verdicts are input to verify, never permission to publish or merge.
