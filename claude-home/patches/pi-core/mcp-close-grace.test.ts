@@ -2,14 +2,16 @@
 // Conserto: claude-home/patches/pi-core/mcp-close-grace.mjs (aplicado pelo wrapper). Registro: docs/specs/0003-boot-exit.md.
 // Rodar: node --experimental-strip-types --test claude-home/patches/pi-core/mcp-close-grace.test.ts
 import { strict as assert } from 'node:assert'
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import {
+  chmodSync,
   cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
+  statSync,
   symlinkSync,
   writeFileSync,
 } from 'node:fs'
@@ -93,4 +95,33 @@ test('rodar o .mjs por um symlink aplica (install.sh --link)', () => {
   symlinkSync(fileURLToPath(new URL('./mcp-close-grace.mjs', import.meta.url)), link)
   execFileSync(process.execPath, [link, dist])
   assert.match(readFileSync(join(dist, 'bundle/chunks/a.js'), 'utf8'), new RegExp(`GRACE_MS=${GRACE_MS}`))
+})
+
+test('diretório somente-leitura: uma linha em stderr, exit 3, sem stack trace, arquivo intacto', {
+  skip: process.getuid?.() === 0,
+}, () => {
+  const dist = fakeDist(MIN)
+  const chunks = join(dist, 'bundle/chunks')
+  chmodSync(chunks, 0o555)
+  try {
+    const r = spawnSync(process.execPath, [fileURLToPath(new URL('./mcp-close-grace.mjs', import.meta.url)), dist], {
+      encoding: 'utf8',
+    })
+    assert.equal(r.status, 3)
+    assert.equal(r.stderr.trim().split('\n').length, 1)
+    assert.doesNotMatch(r.stderr, /\n\s+at /)
+    assert.equal(readFileSync(join(chunks, 'a.js'), 'utf8'), MIN)
+    assert.deepEqual(readdirSync(chunks), ['a.js'])
+  } finally {
+    chmodSync(chunks, 0o755)
+  }
+})
+
+test('escrita atômica: o arquivo final é trocado por rename, sem temporário sobrando', () => {
+  const dist = fakeDist(MIN)
+  const file = join(dist, 'bundle/chunks/a.js')
+  const ino = statSync(file).ino
+  assert.equal(apply(dist), 1)
+  assert.notEqual(statSync(file).ino, ino) // novo inode = rename, não escrita sobre o arquivo existente
+  assert.deepEqual(readdirSync(join(dist, 'bundle/chunks')), ['a.js'])
 })

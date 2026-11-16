@@ -95,6 +95,16 @@ def _clean(rounds: list[list[Run]]) -> list[dict[str, stats.TaskStat]]:
     return [stats._per_task(r for r in runs if r["task_id"] in common) for runs in rounds]  # fmt: skip
 
 
+def _dropped(ny: list[Run], ref: list[Run]) -> tuple[int, int]:
+    """Tasks both rounds ran that `_clean` drops because of an errored run in the ny round / in the reference."""
+    common = {r["task_id"] for r in ny} & {r["task_id"] for r in ref}
+
+    def bad(runs: list[Run]) -> int:
+        return len({r["task_id"] for r in runs if r.get("error")} & common)
+
+    return bad(ny), bad(ref)
+
+
 def _cost(pt: dict[str, stats.TaskStat]) -> float:
     """Sum of the per-task mean cost: the round's cost per repetition, comparable when k differs."""
     return sum(t["cost"] or 0.0 for t in pt.values())
@@ -141,6 +151,9 @@ def scoreboard(ny_dir: Path, ref_dirs: list[Path]) -> tuple[dict[str, Any], str]
             "p_cost": _p_lower(_log_ratios(a, b, "cost")),
             "p_wall": _p_lower(_log_ratios(a, b, "wall")),
             "wall_ratio": _geo(_log_ratios(a, b, "wall")),
+            "drop_ny": _dropped(ny, runs)[0], "drop_ref": _dropped(ny, runs)[1],
+            "drop_cost": len(tasks) - len(_log_ratios(a, b, "cost")),
+            "drop_wall": len(tasks) - len(_log_ratios(a, b, "wall")),
         })  # fmt: skip
     acc = [x for x in rows if x["arm"] == ACCURACY_REF and x["n"]]
     r1 = bool(acc) and all(x["ny_rate"] >= x["ref_rate"] for x in acc)
@@ -169,6 +182,9 @@ def scoreboard(ny_dir: Path, ref_dirs: list[Path]) -> tuple[dict[str, Any], str]
     out = [
         f"# Placar do objetivo: {ny_arm}", "",
         "Tarefas em comum com cada referência, sem execução com erro. Custo = soma do custo médio por tarefa.", "",
+        ("Regra de afirmação (pré-registrada): primária = acerto (R1); co-primárias = custo por tarefa (R2) e tempo. "
+         "Só elas têm sim/não em \"à frente\"; as demais métricas (`metrics`) são exploratórias. "
+         "P(à frente) conta só médias estritamente melhores: empate vale 0."), "",
         f"## R1 acerto: {yn(r1)}", "",
         f"Regra: taxa de acerto do {ny_arm} >= taxa do {ACCURACY_REF} (taxa pontual)."
         + ("" if acc else f" Sem rodada do {ACCURACY_REF}: não avaliada."), "",
@@ -190,13 +206,23 @@ def scoreboard(ny_dir: Path, ref_dirs: list[Path]) -> tuple[dict[str, Any], str]
         counts = "não (informativo)" if x["arm"] == ACCURACY_REF else "sim"
         out.append(f"| {x['arm']} | {x['ny_cost']:.4f} | {x['ref_cost']:.4f} | {_f(x['cost_ratio'], 2)} | {counts} | {_f(x['p_cost'], 3)} | {stats.ahead(x['p_cost'])} |")  # fmt: skip
     out += [
-        "", "### Tempo (informativo)", "",
+        "", "### Tempo (co-primária)", "",
         "P(à frente) = P(o braço é melhor | dados), bootstrap pareado por tarefa com semente fixa; em custo e tempo menor é melhor (razão por tarefa).", "",
         f"| referência | razão de tempo ({ny_arm}/ref, média geométrica) | P(à frente) | à frente (P≥0,80)? |",
         "|---|---|---|---|",
     ]  # fmt: skip
     for x in rows:
         out.append(f"| {x['arm']} | {_f(x['wall_ratio'], 2)} | {_f(x['p_wall'], 3)} | {stats.ahead(x['p_wall'])} |")  # fmt: skip
+    out += [
+        "", "### Tarefas descartadas", "",
+        "Tarefa com execução de erro (infraestrutura) em qualquer braço sai para os dois; razões de custo e tempo também descartam tarefa com valor ausente ou ≤ 0.", "",
+        f"| referência | descartadas por erro no {ny_arm} | descartadas por erro na referência | sem razão de custo | sem razão de tempo |",
+        "|---|---|---|---|---|",
+    ]  # fmt: skip
+    for x in rows:
+        out.append(
+            f"| {x['arm']} | {x['drop_ny']} | {x['drop_ref']} | {x['drop_cost']} | {x['drop_wall']} |"
+        )
     out += [
         "", f"## R3 exceção: {len(exclusive)} tarefa(s) exclusiva(s)", "",
         f"Regra: taxa do {ny_arm} > {EXCLUSIVE_RATE} e taxa 0 em todas as referências ({len(me)} tarefas em comum).", "",

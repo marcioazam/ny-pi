@@ -1,4 +1,5 @@
 import json
+import random
 import subprocess
 import sys
 from collections.abc import Collection, Mapping
@@ -365,10 +366,10 @@ def test_prob_superior_one_when_ny_wins_every_task() -> None:
     assert stats.prob_superior([0.2, 0.5, 1.0, 0.1, 0.3, 0.4]) == pytest.approx(1.0)
 
 
-def test_prob_superior_half_on_symmetric_data_and_on_exact_tie() -> None:
+def test_prob_superior_tie_counts_zero_not_half() -> None:
     sym = [-0.5, 0.5, -0.25, 0.25, -1.0, 1.0, 0.0, 0.0]
-    assert stats.prob_superior(sym) == pytest.approx(0.5, abs=0.02)
-    assert stats.prob_superior([0.0] * 12) == 0.5
+    assert stats.prob_superior(sym) <= 0.5
+    assert stats.prob_superior([0.0] * 12) == 0.0
 
 
 def test_prob_superior_flips_for_lower_is_better() -> None:
@@ -382,7 +383,7 @@ def test_prob_superior_flips_for_lower_is_better() -> None:
     ]  # ny cheaper in 5 of 6 tasks
     assert stats.prob_superior(cost_ratio_logs) < 0.1
     assert stats.prob_superior(cost_ratio_logs, lower_is_better=True) > 0.9
-    assert stats.prob_superior([0.0] * 5, lower_is_better=True) == 0.5
+    assert stats.prob_superior([0.0] * 5, lower_is_better=True) == 0.0
 
 
 def test_prob_superior_is_reproducible_and_seed_dependent() -> None:
@@ -395,3 +396,23 @@ def test_prob_superior_is_reproducible_and_seed_dependent() -> None:
 
 def test_ahead_label_applies_the_0_80_rule() -> None:
     assert [stats.ahead(p) for p in (None, 0.79, 0.80, 1.0)] == ["–", "não", "sim", "sim"]  # fmt: skip
+
+
+def test_one_win_among_zeros_is_not_ahead() -> None:
+    d = [0.0] * 42
+    d[0] = 1 / 3
+    assert stats.prob_superior(d) < stats.AHEAD_P
+    assert stats.ahead(stats.prob_superior(d)) == "não"
+
+
+def test_p_ahead_is_calibrated_under_h0_on_sparse_data() -> None:
+    """Sparse data (93% of tasks 0/1 diff), symmetric noise: P>=0.80 must stay near its nominal 20%."""
+    rng = random.Random(7)
+    sims, hits = 200, 0
+    for _ in range(sims):
+        d = [
+            rng.choice((-1.0, 1.0)) / 3 if rng.random() < 0.07 else 0.0
+            for _ in range(42)
+        ]
+        hits += stats.prob_superior(d, n_boot=500) >= stats.AHEAD_P
+    assert hits / sims <= 0.22

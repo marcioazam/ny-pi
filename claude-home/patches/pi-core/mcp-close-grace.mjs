@@ -4,7 +4,7 @@
 // lê o stdin, então todo `pi -p` curto pagava os 500 ms inteiros no fim. Servidores já no ar saem em 10-25 ms.
 // Conserto: 500 -> 100 ms (o SIGKILL continua 2 s depois). Idempotente; aplicado pelo wrapper bin/pi.
 // Saída 0 = aplicado ou já estava; 2 = não casou (refazer). Uso: mcp-close-grace.mjs <dist do pi-coding-agent>.
-import { existsSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, realpathSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
@@ -37,7 +37,17 @@ export function apply(dist) {
     }
     const form = FORMS.find((f) => f.test(src))
     if (!form) continue
-    writeFileSync(file, src.replace(form, NEW(form)))
+    // Escrita atômica: temporário no mesmo diretório + rename; quem importa o chunk nunca vê um arquivo truncado.
+    const tmp = `${file}.${process.pid}.tmp`
+    try {
+      writeFileSync(tmp, src.replace(form, NEW(form)))
+      renameSync(tmp, file)
+    } catch (err) {
+      try {
+        unlinkSync(tmp)
+      } catch {}
+      throw err
+    }
     fixed++
   }
   return fixed
@@ -50,7 +60,14 @@ if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.ar
     console.error('uso: mcp-close-grace.mjs <dist>')
     process.exit(1)
   }
-  if (apply(dist) < 1) {
+  let fixed = 0
+  try {
+    fixed = apply(dist)
+  } catch (err) {
+    console.error(`pi: mcp-close-grace.mjs não conseguiu escrever (${err?.code ?? err?.message ?? err})`)
+    process.exit(3)
+  }
+  if (fixed < 1) {
     console.error('pi: patches/pi-core/mcp-close-grace.mjs não casou nesta versão; refazer o conserto')
     process.exit(2)
   }

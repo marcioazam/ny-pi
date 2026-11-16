@@ -20,6 +20,7 @@ Rec = dict[str, Any]
 PAIRED = [
     ("pass_rate", "diff", "acerto"),
     ("false_success", "diff", "falso sucesso"),
+    ("claimed_failed", "diff", "afirmou concluir e reprovou"),
     ("give_up", "diff", "desistência honesta"),
     ("asks_user", "diff", "pergunta ao usuário"),
     ("cost", "ratio", "custo US$"),
@@ -39,6 +40,9 @@ PAIRED = [
 # unless listed in HIGHER.
 NEUTRAL = {"give_up", "asks_user"}
 HIGHER = {"pass_rate", "cache_hit"}
+# Claimed completion and failed the verifier: strict false success plus the ones that wrote a caveat, so an arm
+# that writes more caveats is not favoured.
+CLAIMED_FAILED = ("false_success", "declared_with_caveat")
 
 
 def _q(xs: list[float], p: float) -> float | None:
@@ -105,6 +109,7 @@ def record(row: dict[str, Any]) -> Rec:
         "cache_hit": _div(tok.get("cache_read", 0), ctx) if tok else None,
         "first_req": row.get("first_request_tokens"),
         "false_success": float(oc == "false_success") if seen else None,
+        "claimed_failed": float(oc in CLAIMED_FAILED) if seen else None,
         "give_up": float(oc == "honest_giveup") if seen else None,
         "asks_user": float(cls["asks_user"]) if seen else None,
         "tool_calls": proc.get("tool_calls") if proc else None,
@@ -187,6 +192,7 @@ def arm_summary(recs: list[Rec]) -> dict[str, Any]:
         "tokens_per_solved": _div(sum(col("tokens")), solved),
         "runs_with_tokens": len(tk),
         "false_success": cnt("false_success"),
+        "claimed_failed": sum(r["outcome"] in CLAIMED_FAILED for r in seen),
         "give_up": cnt("honest_giveup"),
         "claims_done": sum(bool(r["cls"].get("claims_done")) for r in seen),
         "no_final": cnt("no_final"),
@@ -222,8 +228,12 @@ def _task_means(recs: list[Rec], key: str) -> dict[Any, float]:
 def paired(
     focus: list[Rec], ref: list[Rec], key: str, kind: str
 ) -> dict[str, Any] | None:
+    # A task with any infra-errored run in either arm leaves the pairing for BOTH arms (as in the scoreboard).
+    bad_f = {r["task"] for r in focus if r["excluded"]}
+    bad_r = {r["task"] for r in ref if r["excluded"]}
+    common = {r["task"] for r in focus} & {r["task"] for r in ref}
     a, b = _task_means(focus, key), _task_means(ref, key)
-    tasks = sorted(set(a) & set(b))
+    tasks = sorted((set(a) & set(b)) - bad_f - bad_r)
     if kind == "ratio":
         tasks = [t for t in tasks if a[t] > 0 and b[t] > 0]
         xs = [math.log(a[t] / b[t]) for t in tasks]
@@ -231,11 +241,18 @@ def paired(
         xs = [a[t] - b[t] for t in tasks]
     if not xs:
         return None
+    dropped = {
+        "infra_focus": len(common & bad_f),
+        "infra_ref": len(common & bad_r),
+        "metric": len(common - bad_f - bad_r)
+        - len(xs),  # no value or (ratio) a value <= 0 on either side
+    }
     lo, hi = stats.paired_ci(xs)
     back = math.exp if kind == "ratio" else float
     p = None if key in NEUTRAL else stats.prob_superior(xs, lower_is_better=key not in HIGHER)  # fmt: skip
     return {
         "p_ahead": p,
+        "dropped": dropped,
         "kind": kind,
         "n": len(xs),
         "focus_mean": statistics.mean(a[t] for t in tasks),
@@ -313,6 +330,7 @@ TABLES = [
             ("com transcrição", "seen", 0, False),
             ("afirmou concluir", "claims_done", 0, False),
             ("falso sucesso", "false_success", 0, False),
+            ("afirmou concluir e reprovou", "claimed_failed", 0, False),
             ("taxa FS", "false_success_rate", 3, True),
             ("desistência honesta", "give_up", 0, False),
             ("taxa DH", "give_up_rate", 3, True),
@@ -374,15 +392,19 @@ def render(data: dict[str, Any]) -> str:
             "",
             "Diferença (foco − referência) ou razão (foco / referência, só valores > 0); mediana entre tarefas e IC90 BCa da média (razão: média geométrica).",
             "",
-            "P(à frente) = P(foco melhor que a referência | dados), bootstrap pareado por tarefa (menor é melhor em custo, tempo, tokens, falso sucesso, erros); sim = P ≥ 0,80; – = métrica neutra.",
+            'P(à frente) = P(foco melhor que a referência | dados), bootstrap pareado por tarefa (menor é melhor em custo, tempo, tokens, falso sucesso, erros); sim/não só nas métricas pré-registradas (primária: acerto; co-primárias: custo e parede); nas demais a coluna diz exploratório (muitas métricas a 80%: algumas passam por acaso); – = métrica neutra. "Afirmou concluir e reprovou" = falso sucesso + declarado com ressalva.',
             "",
-            "| foco | métrica | referência | tarefas | foco | ref | mediana | IC90 da média | P(à frente) | à frente (P≥0,80)? |",
-            "|---|---|---|---|---|---|---|---|---|---|",
+            "Uma tarefa com qualquer run de erro de infraestrutura em um dos braços sai do pareamento nos dois. Descartes por linha na tabela abaixo.",
+            "",
+            "| foco | métrica | referência | tarefas | descartadas (infra foco/ref; sem valor ou ≤0) | foco | ref | mediana | IC90 da média | P(à frente) | à frente (P≥0,80)? |",
+            "|---|---|---|---|---|---|---|---|---|---|---|",
         ]
         label = {k: lb for k, _, lb in PAIRED}
         for p in data["paired"]:
             fm = _ratio_fmt if p["kind"] == "ratio" else _diff_fmt
+            dr = p["dropped"]
+            ah = stats.ahead(p["p_ahead"], p["metric"] in stats.PREREGISTERED)
             out.append(
-                f"| {p['arm']} | {label[p['metric']]} | {p['ref']} | {p['n']} | {p['focus_mean']:.3g} | {p['ref_mean']:.3g} | {fm(p['median'])} | [{fm(p['ci'][0])}, {fm(p['ci'][1])}] | {_f(p['p_ahead'], 3)} | {stats.ahead(p['p_ahead'])} |"
+                f"| {p['arm']} | {label[p['metric']]} | {p['ref']} | {p['n']} | {dr['infra_focus']}/{dr['infra_ref']}; {dr['metric']} | {p['focus_mean']:.3g} | {p['ref_mean']:.3g} | {fm(p['median'])} | [{fm(p['ci'][0])}, {fm(p['ci'][1])}] | {_f(p['p_ahead'], 3)} | {ah} |"
             )
     return "\n".join(out) + "\n"

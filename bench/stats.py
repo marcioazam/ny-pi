@@ -134,22 +134,26 @@ def prob_superior(
     """P(candidato melhor que a referência | dados): bootstrap pareado agrupado por tarefa.
 
     `diffs` = uma diferença por tarefa (taxa média das repetições; para razões, o log da razão). Reamostra tarefas
-    com semente fixa e conta as médias > 0 (< 0 se menor é melhor); média ≈ 0 vale meio, então empate exato dá 0,5."""
+    com semente fixa e conta só as médias ESTRITAMENTE melhores (> 0; < 0 se menor é melhor). Empate (média ≈ 0) conta 0: creditar meio
+    dava P≈0,82 a 1 vitória entre 41 zeros; empate exato total dá P = 0."""
     if not diffs:
         raise ValueError("no paired tasks")
     n, sign = len(diffs), -1.0 if lower_is_better else 1.0
     d = [sign * x for x in diffs]
-    rng, wins, ties = random.Random(seed), 0, 0
-    for _ in range(n_boot):
-        m = sum(rng.choices(d, k=n)) / n
-        wins += m > 1e-12
-        ties += abs(m) <= 1e-12
-    return (wins + ties / 2) / n_boot
+    rng = random.Random(seed)
+    return sum(sum(rng.choices(d, k=n)) / n > 1e-12 for _ in range(n_boot)) / n_boot
 
 
-def ahead(p: float | None) -> str:
-    """Column "à frente (P≥0,80)?": sim / não / – (no paired data)."""
-    return "–" if p is None else "sim" if p >= AHEAD_P else "não"
+# Pre-registered metrics (owner, multiplicity): primary = accuracy, co-primary = cost per task and time. Only these
+# get a yes/no "ahead"; the rest show P but are exploratory (many metrics, 80% each: some will cross by chance).
+PREREGISTERED = ("pass_rate", "cost", "wall")
+
+
+def ahead(p: float | None, preregistered: bool = True) -> str:
+    """Column "à frente (P≥0,80)?": sim / não / – (no paired data); "exploratório" off the pre-registered list."""
+    if p is None:
+        return "–"
+    return ("sim" if p >= AHEAD_P else "não") if preregistered else "exploratório"
 
 
 def _ratio(

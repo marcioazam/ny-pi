@@ -1,7 +1,6 @@
 """Power simulation: P(ahead) and IC90 > 0 as a function of tasks, repetitions and the true gap."""
 
 import json
-import random
 from pathlib import Path
 from typing import Any
 
@@ -24,9 +23,17 @@ def cell(delta: float, k: int, n: int, sims: int = 400, ny: list[float] = FLAT_N
 def test_shift_imposes_the_target_gap() -> None:
     ny, ref = [0.2, 0.9, 0.5, 0.99], [0.4, 0.6, 0.5, 0.3]
     for target in (0.05, 0.2, -0.1):
-        shifted = sim.shift(ny, ref, target)
+        shifted, eff = sim.shift(ny, ref, target)
         assert sum(shifted) / 4 - sum(ref) / 4 == pytest.approx(target, abs=1e-6)
+        assert eff == pytest.approx(sum(shifted) / 4 - sum(ref) / 4)
         assert all(0 <= x <= 1 for x in shifted)
+
+
+def test_shift_reports_the_effective_gap_when_the_target_is_unreachable() -> None:
+    _, eff = sim.shift([0.9, 0.95], [0.5, 0.5], 0.7)
+    assert eff == pytest.approx(0.5, abs=1e-6)
+    md = sim.render({"tasks": 2, "sims": 1, "cells": [{"delta": 0.7, "effective": eff, "k": 1, "n": 2, "p80": 0.5, "ci90": 0.5}], "minimum": {}})  # fmt: skip
+    assert "Δ efetivo" in md and "Aviso" in md and "+50.0 pp" in md
 
 
 def test_power_grows_with_tasks_and_repetitions() -> None:
@@ -44,12 +51,22 @@ def test_simulation_is_reproducible() -> None:
     assert cell(0.1, 2, 12) == cell(0.1, 2, 12)
 
 
-def test_normal_approximation_tracks_the_bootstrap() -> None:
-    rng = random.Random(3)
-    diffs = [rng.choice([-1, -0.5, 0, 0.5, 1]) * 0.4 + 0.15 for _ in range(40)]
-    assert sim.p_ahead_normal(diffs) == pytest.approx(stats.prob_superior(diffs), abs=0.03)  # fmt: skip
-    assert sim.p_ahead_normal([0.0] * 5) == 0.5 and sim.p_ahead_normal([0.1] * 5) == 1.0
-    assert sim.p_ahead_normal([-0.1] * 5) == 0.0
+def test_sparse_null_false_positive_rate_stays_near_nominal() -> None:
+    """93% of tasks tied: the old normal approximation and half-credit for ties gave 26-29% against the nominal 20%."""
+    ref = [0.0] * 39 + [0.5] * 3
+    c = sim.simulate(ref, ref, 0.0, 1, 42, 300, seed="sparse")
+    assert c.p80 <= 0.25
+
+
+def test_one_win_among_ties_never_reaches_the_threshold() -> None:
+    assert (
+        stats.prob_superior([0.0] * 41 + [1 / 3], n_boot=sim.SIM_BOOT) < stats.AHEAD_P
+    )
+
+
+def test_zero_gap_default_reports_the_false_positive_rate() -> None:
+    assert sim.DEFAULT_DELTAS.split(",")[0] == "0"
+    assert "falso positivo" in sim.render({"tasks": 1, "sims": 1, "cells": [{"delta": 0.0, "effective": 0.0, "k": 1, "n": 1, "p80": 0.1, "ci90": 0.0}], "minimum": {}})  # fmt: skip
 
 
 def test_minimum_picks_the_cheapest_cell_meeting_both() -> None:
@@ -77,7 +94,7 @@ def test_cli_power_table_and_json(tmp_path: Path, capsys: Any) -> None:
     args = ["power", "--ny", str(ny), "--ref", str(ref), "--deltas", "0.05", "--ks", "1,2", "--ns", "6,12", "--sims", "200", "--json", str(out)]  # fmt: skip
     assert cli.main(args) == 0
     md = capsys.readouterr().out
-    assert "| Δ | k | n |" in md and "+5 pp" in md
+    assert "| Δ alvo | Δ efetivo | k | n |" in md and "+5 pp" in md
     data = json.loads(out.read_text())
     assert len(data["cells"]) == 4 and data["tasks"] == 6
     assert cli.main(["power", "--ny", str(ny), "--ref", str(ref), "--sims", "10"]) == 0

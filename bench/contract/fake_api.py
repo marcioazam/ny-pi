@@ -210,9 +210,10 @@ class FakeApi:
                 self.send_header("content-type", ctype)
                 self.send_header("content-length", str(len(payload)))
                 self.end_headers()
+                # Before the final write: the client may read the answer and call back before a later store runs.
+                api.hits[seq].done = time.monotonic()
                 self.wfile.write(payload)
                 self.wfile.flush()
-                api.hits[seq].done = time.monotonic()
 
             def do_GET(self) -> None:
                 self.send_error(404)

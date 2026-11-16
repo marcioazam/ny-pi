@@ -4,8 +4,6 @@ import json
 from pathlib import Path
 from typing import Any
 
-import pytest
-
 from bench.metrics import summary
 from bench.metrics.test_trace import p_asst, p_call, p_res, pi_text, text
 
@@ -135,13 +133,13 @@ def test_paired_p_ahead_direction_and_neutral_metrics(tmp_path: Path) -> None:
     out = summary.compute(two_arms(tmp_path), focus="ny-pi")
     rows = {p["metric"]: p for p in out["paired"] if p["ref"] == "pi-vanilla@m"}
     assert rows["pass_rate"]["p_ahead"] < 0.2  # ny loses where it differs
-    assert rows["cost"]["p_ahead"] == pytest.approx(
-        0.5, abs=0.05
-    )  # ratios 0.5x and 2x cancel in the log
+    assert (
+        rows["cost"]["p_ahead"] <= 0.5
+    )  # ratios 0.5x and 2x cancel in the log; ties count 0
     assert rows["give_up"]["p_ahead"] is None and rows["asks_user"]["p_ahead"] is None
     md = summary.render(out)
     assert "P(à frente)" in md and "à frente (P≥0,80)?" in md
-    assert "| não |" in md and "| – |" in md
+    assert "| não |" in md and "| – |" in md and "| exploratório |" in md
 
 
 def test_paired_p_ahead_lower_is_better_for_cost(tmp_path: Path) -> None:
@@ -149,5 +147,58 @@ def test_paired_p_ahead_lower_is_better_for_cost(tmp_path: Path) -> None:
     ref = [run(f"t{i}", 0, True, 0.2) for i in range(6)]
     rounds = [make_round(tmp_path, "ny-pi", mine, {}), make_round(tmp_path, "pi-vanilla", ref, {})]  # fmt: skip
     rows = {p["metric"]: p for p in summary.compute(rounds)["paired"]}
-    assert rows["cost"]["p_ahead"] == 1.0 and rows["pass_rate"]["p_ahead"] == 0.5
+    assert (
+        rows["cost"]["p_ahead"] == 1.0 and rows["pass_rate"]["p_ahead"] == 0.0
+    )  # all tied
     assert "| 1.000 | sim |" in summary.render(summary.compute(rounds))
+
+
+def test_paired_drops_a_task_with_an_infra_run_from_both_arms(tmp_path: Path) -> None:
+    mine = [run(f"t{i}", r, True, 0.1) for i in range(4) for r in (0, 1)]
+    ref = [run(f"t{i}", r, True, 0.2) for i in range(4) for r in (0, 1)]
+    ref[0] = run(
+        "t0", 0, False, 0.0, error="infra: no model spend"
+    )  # one errored rep of t0 in the reference
+    mine.append(
+        run("t9", 0, True, 0.0)
+    )  # zero cost: kept for pass_rate, dropped from the cost ratio
+    ref.append(run("t9", 0, True, 0.2))
+    rounds = [
+        make_round(tmp_path, "ny-pi", mine, {}),
+        make_round(tmp_path, "pi-vanilla", ref, {}),
+    ]
+    rows = {p["metric"]: p for p in summary.compute(rounds)["paired"]}
+    assert rows["pass_rate"]["n"] == 4 and rows["pass_rate"]["dropped"] == {"infra_focus": 0, "infra_ref": 1, "metric": 0}  # fmt: skip
+    assert (
+        rows["cost"]["n"] == 3 and rows["cost"]["dropped"]["metric"] == 1
+    )  # t0 gone for both arms, t9 has cost 0
+    assert "| 0/1; 0 |" in summary.render(summary.compute(rounds))
+
+
+def test_claimed_failed_adds_caveated_claims_and_marks_exploratory(
+    tmp_path: Path,
+) -> None:
+    mine = [run(f"t{i}", 0, False) for i in range(6)]
+    ref = [run(f"t{i}", 0, False) for i in range(6)]
+    fin = {(f"t{i}", 0): "Implementei tudo, pronto." for i in range(6)}
+    fin_c = {(f"t{i}", 0): "Implementei, pronto. Decidi ler o campo como texto; não rodei os testes." for i in range(6)}  # fmt: skip
+    rounds = [
+        make_round(tmp_path, "ny-pi", mine, fin_c),
+        make_round(tmp_path, "pi-vanilla", ref, fin),
+    ]
+    out = summary.compute(rounds)
+    arms = out["arms"]
+    assert (
+        arms["ny-pi@m"]["claimed_failed"] == 6 and arms["ny-pi@m"]["false_success"] == 0
+    )
+    assert (
+        arms["pi-vanilla@m"]["claimed_failed"] == 6
+        and arms["pi-vanilla@m"]["false_success"] == 6
+    )
+    rows = {p["metric"]: p for p in out["paired"]}
+    assert (
+        rows["claimed_failed"]["focus_mean"] == 1.0
+        and rows["false_success"]["focus_mean"] == 0.0
+    )
+    md = summary.render(out)
+    assert "afirmou concluir e reprovou" in md and "exploratório" in md

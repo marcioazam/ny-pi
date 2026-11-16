@@ -307,6 +307,21 @@ def test_metrics_from_known_timestamps() -> None:
         speed.metrics(10.0, hits[:1], 12.0)
 
 
+def test_metrics_use_routed_hits_only() -> None:
+    aux = Hit(0, "", 0, 9999, 10.1, 10.2)
+    got = speed.metrics(
+        10.0, [aux, hit(1, 10.5, 10.6), hit(2, 11.0, 11.1), hit(3, 11.7, 11.8)], 12.0
+    )
+    assert got["boot_s"] == pytest.approx(0.5)
+    assert got["first_request_bytes"] == 400
+
+
+def test_metrics_reject_unfinished_hit() -> None:
+    hits = [hit(0, 10.5, 10.6), hit(1, 11.0, 11.1), hit(2, 11.7, 0.0)]
+    with pytest.raises(check.EnvError, match="fim de resposta"):
+        speed.metrics(10.0, hits, 12.0)
+
+
 def test_stats_and_paired_ratio() -> None:
     assert speed.median([3.0, 1.0, 2.0]) == 2.0
     assert speed.median([1.0, 2.0, 3.0, 10.0]) == 2.5

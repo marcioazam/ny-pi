@@ -4,9 +4,10 @@ Each arm's observed per-task rate is shrunk (Beta(0.5, 0.5) prior) so no task si
 shifted until the mean gap equals the target, then tasks are drawn with replacement and k Bernoulli runs per arm per
 task. Per simulated round two decisions: P(ahead) >= 0.80 and "strong" (90% interval lower bound > 0).
 
-Inside the simulation both decisions use the normal approximation of the task-clustered bootstrap (mean/se of the
-per-task differences): the exact BCa bootstrap costs 10 000 resamples per round, about 10^10 operations for a grid.
-The tests pin the approximation to `stats.prob_superior`."""
+Inside the simulation the "strong" decision uses the normal approximation of the task-clustered bootstrap (mean/se of
+the per-task differences). P(ahead) uses the real rule, `stats.prob_superior`, with SIM_BOOT resamples instead of
+10 000 (cost: 10 000 resamples per round is ~10^10 operations for a grid): the normal approximation overstates P on
+sparse data (1 win among 41 ties: 0.84 against 0.64) and so overstated the power and the false-positive rate."""
 
 import json
 import math
@@ -17,13 +18,16 @@ from typing import Any, NamedTuple
 from bench import report, stats
 
 PRIOR = 0.5  # Beta(0.5, 0.5) (Jeffreys): rate = (passes + 0.5) / (runs + 1)
-DEFAULT_DELTAS, DEFAULT_KS, DEFAULT_NS = "0.03,0.05,0.08", "1,2,3", "24,49,73"
+DEFAULT_DELTAS, DEFAULT_KS, DEFAULT_NS = "0,0.03,0.05,0.08", "1,2,3", "24,49,73"
 N_SIMS = 2000
+SIM_BOOT = 100  # resamples per simulated round for P(ahead); noise ~0.04 around the 0.80 threshold
+TOL = 0.005  # warn when the reachable gap strays this far from the target
 
 
 class Power(NamedTuple):
     p80: float  # share of simulated rounds with P(ahead) >= 0.80
     ci90: float  # share with the 90% interval lower bound > 0
+    effective: float = 0.0  # mean(shifted ny) - mean(ref) actually simulated
 
 
 def shrunk_rates(ny_dir: Path, ref_dir: Path) -> tuple[list[float], list[float]]:
@@ -39,8 +43,10 @@ def shrunk_rates(ny_dir: Path, ref_dir: Path) -> tuple[list[float], list[float]]
     return [shrink(a[t]) for t in tasks], [shrink(b[t]) for t in tasks]
 
 
-def shift(ny: list[float], ref: list[float], delta: float) -> list[float]:
-    """ny rates plus one constant, clipped to [0, 1], so the mean gap to ref is `delta` (nearest reachable)."""
+def shift(ny: list[float], ref: list[float], delta: float) -> tuple[list[float], float]:
+    """ny rates plus one constant, clipped to [0, 1], so the mean gap to ref is `delta` (nearest reachable).
+
+    Returns (shifted rates, EFFECTIVE gap mean(shifted) - mean(ref)); clipping can make it differ from `delta`."""
     target = sum(ref) / len(ref) + delta
 
     def mean(c: float) -> float:
@@ -50,7 +56,8 @@ def shift(ny: list[float], ref: list[float], delta: float) -> list[float]:
     for _ in range(50):
         mid = (lo + hi) / 2
         lo, hi = (mid, hi) if mean(mid) < target else (lo, mid)
-    return [min(1.0, max(0.0, x + (lo + hi) / 2)) for x in ny]
+    out = [min(1.0, max(0.0, x + (lo + hi) / 2)) for x in ny]
+    return out, sum(out) / len(out) - sum(ref) / len(ref)
 
 
 def _t(diffs: list[float]) -> float:
@@ -63,13 +70,9 @@ def _t(diffs: list[float]) -> float:
     return m * math.sqrt(n) / sd
 
 
-def p_ahead_normal(diffs: list[float]) -> float:
-    return stats.ND.cdf(_t(diffs))
-
-
 def simulate(ny: list[float], ref: list[float], delta: float, k: int, n: int, sims: int, seed: str) -> Power:  # fmt: skip
     rng = random.Random(seed)
-    new = shift(ny, ref, delta)
+    new, eff = shift(ny, ref, delta)
     p80 = ci = 0
     for _ in range(sims):
         diffs = []
@@ -78,9 +81,9 @@ def simulate(ny: list[float], ref: list[float], delta: float, k: int, n: int, si
             b = sum(rng.random() < ref[i] for _ in range(k))
             diffs.append((a - b) / k)
         t = _t(diffs)
-        p80 += stats.ND.cdf(t) >= stats.AHEAD_P
+        p80 += stats.prob_superior(diffs, n_boot=SIM_BOOT) >= stats.AHEAD_P
         ci += t > stats.Z
-    return Power(p80 / sims, ci / sims)
+    return Power(p80 / sims, ci / sims, eff)
 
 
 def grid(ny: list[float], ref: list[float], deltas: list[float], ks: list[int], ns: list[int], sims: int) -> list[dict[str, Any]]:  # fmt: skip
@@ -115,19 +118,38 @@ def render(data: dict[str, Any]) -> str:
             "(aproximação normal do bootstrap por tarefa)."
         ),
         "",
-        "| Δ | k | n | poder P≥0,80 | poder IC90>0 |",
-        "|---|---|---|---|---|",
+        "| Δ alvo | Δ efetivo | k | n | poder P≥0,80 | poder IC90>0 |",
+        "|---|---|---|---|---|---|",
     ]  # fmt: skip
     for c in data["cells"]:
         out.append(
-            f"| {c['delta'] * 100:+.0f} pp | {c['k']} | {c['n']} | {c['p80']:.2f} | {c['ci90']:.2f} |"
+            f"| {c['delta'] * 100:+.0f} pp | {c['effective'] * 100:+.1f} pp | {c['k']} | {c['n']} | {c['p80']:.2f} | {c['ci90']:.2f} |"
         )
+    off = sorted(
+        {
+            (c["delta"], round(c["effective"], 4))
+            for c in data["cells"]
+            if abs(c["effective"] - c["delta"]) > TOL
+        }
+    )
+    for d, e in off:
+        out.append("")
+        out.append(
+            f"Aviso: Δ alvo {d * 100:+.1f} pp inalcançável (o corte em [0, 1] limita); simulado Δ efetivo {e * 100:+.1f} pp."
+        )
+    if any(c["delta"] == 0 for c in data["cells"]):
+        out += [
+            "",
+            'Δ = 0 mostra a taxa de falso positivo: poder P≥0,80 é a fração de rodadas sem diferença real que mesmo assim dizem "à frente".',
+        ]
     out += [
         "",
         "Mínimo com os dois poderes ≥ 0,80 (menos execuções n×k por braço):",
         "",
     ]
     for d, m in data["minimum"].items():
+        if float(d) <= 0:
+            continue
         out.append(
             f"- Δ {float(d) * 100:+.0f} pp: "
             + (f"n={m['n']}, k={m['k']}" if m else "nenhum na grade")
@@ -150,7 +172,7 @@ def run(ny_dir: Path, ref_dir: Path, deltas: str, ks: str, ns: str, sims: int, j
         "tasks": len(ref),
         "sims": sims,
         "cells": cells,
-        "minimum": {str(d): minimum(cells, d) for d in ds},
+        "minimum": {str(d): minimum(cells, d) for d in ds if d > 0},
     }
     if json_out:
         json_out.write_text(json.dumps(data, indent=1))

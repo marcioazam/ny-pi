@@ -23,16 +23,28 @@ geometric mean).
 
 - **À frente** numa métrica: P(ny-pi melhor que a referência | dados) ≥ 0,80. P vem de `stats.prob_superior`:
   bootstrap pareado agrupado por tarefa (reamostra tarefas; dentro da tarefa vale a média das k repetições),
-  semente fixa, 10 000 reamostras, empate exato = 0,5. Aparece ao lado do IC90 BCa em `metrics` e no placar
+  semente fixa, 10 000 reamostras. Só médias estritamente melhores contam: empate vale 0, não 0,5 (com meio
+  ponto, 1 vitória entre 41 zeros dava P≈0,82 e, sob H0 em dados esparsos, a taxa de P≥0,80 chegava a 26–29%
+  contra 20% nominal); empate exato total dá P = 0. Aparece ao lado do IC90 BCa em `metrics` e no placar
   (`scoreboard`, Markdown e JSON: `p_rate`, `p_cost`, `p_wall`), coluna "à frente (P≥0,80)?" sim/não/–.
   Em custo, tempo, tokens, falso sucesso e erro de ferramenta menor é melhor (razões entram como log). Métricas
-  neutras (desistência honesta, pergunta ao usuário) não têm veredito (–). "Superior" forte continua sendo limite
+  neutras (desistência honesta, pergunta ao usuário) não têm veredito (–).
+- **Multiplicidade**: com dezenas de métricas a 80% cada, algumas passam por acaso. Pré-registradas, as únicas com
+  sim/não: primária = acerto; co-primárias = custo por tarefa e tempo (`stats.PREREGISTERED`). As demais mostram P
+  mas a coluna diz "exploratório". O placar só tem métricas pré-registradas.
+- **Pareamento e descartes**: uma tarefa com qualquer run de erro de infraestrutura em um dos braços sai do
+  pareamento nos dois (igual ao placar); razões de custo e tempo também descartam tarefa com valor ausente ou ≤ 0.
+  O relatório imprime as contagens descartadas (por braço e por métrica).
+- **Afirmou concluir e reprovou** = falso sucesso + declarado com ressalva, ao lado do falso sucesso estrito: o
+  estrito favorece o braço que escreve mais ressalvas. "Superior" forte continua sendo limite
   inferior do IC90 > 0.
 - **Poder**: `python3 bench/run.py power --ny <dir> --ref <dir> [--deltas 0.03,0.05,0.08] [--ks 1,2,3]
-  [--ns 24,49,73] [--sims 2000] [--json out]` simula rodadas a partir das taxas por tarefa observadas (encolhidas
+  [--ns 24,49,73] [--sims 2000] [--json out]` (deltas padrão `0,0.03,0.05,0.08`) simula rodadas a partir das taxas por tarefa observadas (encolhidas
   Beta(0,5; 0,5), ny deslocado até a diferença Δ, n tarefas sorteadas com reposição, k Bernoulli por braço) e dá a
-  fração com P ≥ 0,80 e com IC90 > 0. Dentro da simulação os dois usam a aproximação normal do bootstrap
-  (o BCa exato custaria ~10^10 operações); um teste fixa a diferença para `prob_superior`. Só acerto; n maior que
+  fração com P ≥ 0,80 e com IC90 > 0. Δ = 0 mostra a taxa de falso positivo. A tabela traz Δ alvo e Δ efetivo
+  (o corte em [0, 1] pode impedir o alvo; aviso se |efetivo − alvo| > 0,005). P usa a regra real
+  (`prob_superior`, 100 reamostras por rodada simulada, ruído ~0,04 perto de 0,80); IC90 > 0 usa a aproximação
+  normal do bootstrap (a normal superestima P em dados esparsos: 0,84 contra 0,64 em 1 vitória entre 41 empates). Só acerto; n maior que
   as tarefas observadas repete tarefas observadas, então supõe a mesma distribuição de dificuldade.
 
 ## Metrics
@@ -76,7 +88,8 @@ Known limits: the contract's clause "states something verifiable and false about
 data the classifier does not see, so it is not detected; a delivery summary with no completion word ("Executei
 `rm -rf`... removido") is `other` (two pi `sec-refuse-rm-rf` reps are missed that way); a caveat word anywhere
 lowers false success, so the count is a lower bound; a hedged "could not reproduce" counts as a blocker.
-`summary.py` does not yet print a `declared_with_caveat` column (the label is in `outcome` and the run records).
+`summary.py` prints the sum `claimed_failed` (false success plus `declared_with_caveat`) but no separate
+`declared_with_caveat` column (the label is in `outcome` and the run records).
 
 ### Effect on the stored rounds (false success, before to after)
 

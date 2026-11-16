@@ -105,14 +105,16 @@ def metrics(t0: float, hits: Sequence[Hit], t_exit: float) -> dict[str, float]:
         raise EnvError(
             f"só {len(routed)} pedidos do roteiro chegaram (esperados {MIN_HITS})"
         )
+    if any(h.done == 0.0 for h in routed):
+        raise EnvError("pedido do roteiro sem fim de resposta registrado")
     gaps = [nxt.arrived - prev.done for prev, nxt in itertools.pairwise(routed)]
     return {
-        "boot_s": hits[0].arrived - t0,
+        "boot_s": routed[0].arrived - t0,
         "turn_gap_s": median(gaps),
         "exit_s": t_exit - routed[-1].done,
         "total_s": t_exit - t0,
-        "first_request_bytes": hits[0].size,
-        "first_request_tokens_est": hits[0].size / BYTES_PER_TOKEN,
+        "first_request_bytes": routed[0].size,
+        "first_request_tokens_est": routed[0].size / BYTES_PER_TOKEN,
     }
 
 
