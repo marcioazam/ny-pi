@@ -122,7 +122,12 @@ for (const shell of shells) {
     const pid = Number(m[1])
     try {
       process.kill(pid, 0) // ainda vivo depois que o shell saiu
-      for (let i = 0; i < 30 && !readFileSync(m[2], 'utf8').includes('done'); i++) sleepMs(100)
+      // a espera sugerida na mensagem volta quando o job acaba, sem sono fixo longo
+      const w = /To wait for it, use: (.+?) \(returns/.exec(r.stdout)
+      assert.ok(w, r.stdout)
+      const t1 = Date.now()
+      assert.equal(sh(shell, w[1]).status, 0)
+      assert.ok(Date.now() - t1 < 4000, `espera levou ${Date.now() - t1} ms`)
       assert.match(readFileSync(m[2], 'utf8'), /start\ndone\n/)
     } finally {
       try {

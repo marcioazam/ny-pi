@@ -46,7 +46,7 @@ const BG_DIR = '${TMPDIR:-/tmp}/pi-bg'
  * O comando vai em linhas próprias (heredoc e comentário final funcionam); o vigia é morto com o `sleep` filho.
  */
 export function wrapForBackground(command: string, seconds: number, id: string, dir = BG_DIR): string {
-  const msg = `[bash-timeout] Still running after ${seconds} s: left running in the background (pid $__pibg_p, log $__pibg_l). Do not start another copy. Poll with: tail -n 50 $__pibg_l ; check with: kill -0 $__pibg_p`
+  const msg = `[bash-timeout] Still running after ${seconds} s: left running in the background (pid $__pibg_p, log $__pibg_l). Do not start another copy. To wait for it, use: while kill -0 $__pibg_p 2>/dev/null; do sleep 2; done (returns as soon as it ends; prefer this to a fixed sleep). Then read: tail -n 50 $__pibg_l`
   return `mkdir -p "${dir}"; __pibg_l="${dir}/${id}.log"
 {
 ${command}

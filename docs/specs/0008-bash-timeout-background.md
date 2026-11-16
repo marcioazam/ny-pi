@@ -21,6 +21,8 @@ Com `PI_BASH_TIMEOUT_BG=1`, o hook `tool_call` de `extensions/bash-timeout` rees
 3. Fim normal: o shell imprime o log inteiro e sai com o exit code original.
 4. Estouro: o trap imprime os últimos 4000 bytes do log e `[bash-timeout] Still running after T s: left running in
    the background (pid P, log L). Do not start another copy. ...`, e sai com 0; o comando continua vivo.
+   A mensagem sugere esperar com `while kill -0 P 2>/dev/null; do sleep 2; done`, que volta assim que o job
+   acaba: no TB o ny-pi pedia 173 s de `sleep` fixo por sessão contra 41,5 s do Claude Code (mesmas tarefas).
 5. Não embrulha comando vazio, terminado em `&` nem iniciado pela palavra `sleep`.
 
 Sem a env o comportamento é o de antes, byte a byte; `TIMEOUT_HINT` segue valendo nesse caminho.
