@@ -22,7 +22,7 @@ import classify as cl
 import injector as inj
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "contract"))
-import check
+import check  # type: ignore[import-not-found]  # sibling dir, path set above
 
 __all__ = [
     "ARMS",

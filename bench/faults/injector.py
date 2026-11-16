@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Self
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "contract"))
-from fake_api import FakeApi, Step, sse_events
+from fake_api import FakeApi, Step, sse_events  # type: ignore[import-not-found]  # sibling dir, path set above
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -64,7 +64,7 @@ def read_step(body: Mapping[str, Any]) -> Step:
 
 
 def _sse(step: Step, body: Mapping[str, Any], block_id: str) -> bytes:
-    return sse_events(step, str(body.get("model", "fake")), block_id)
+    return bytes(sse_events(step, str(body.get("model", "fake")), block_id))
 
 
 def reply(
