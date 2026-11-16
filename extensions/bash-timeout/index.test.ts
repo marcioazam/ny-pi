@@ -72,6 +72,8 @@ test('timeout do bash ganha a dica de rodar em segundo plano (o pi só diz quant
   assert.match(text, /Command timed out after 1800 seconds/)
   assert.match(text, new RegExp(`${MAX_S} s`))
   assert.match(text, /nohup/)
+  assert.match(text, /while kill -0 \S+ 2>\/dev\/null; do sleep \d+; done/) // espera que volta quando o job acaba
+  assert.doesNotMatch(text, /\bpoll\b/)
 })
 
 test('resultado sem timeout, de outra ferramenta ou sem erro fica intacto', () => {

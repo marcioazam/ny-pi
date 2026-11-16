@@ -35,7 +35,7 @@ export function decide(timeout: unknown): { timeout: number } {
  * O pi só diz quanto esperou (`bash.js:299`); com o teto silencioso o modelo não sabe que pedir mais não adianta.
  * Dica do OpenCode (changelog 2.2.7: timeout "suggest a larger timeout"), adaptada ao teto (varredura 2, O2).
  */
-export const TIMEOUT_HINT = `\n\n[bash-timeout] Timeouts are capped at ${MAX_S} s. For longer work run it in the background (nohup <cmd> > log 2>&1 &) and poll the log with short commands.`
+export const TIMEOUT_HINT = `\n\n[bash-timeout] Timeouts are capped at ${MAX_S} s. For longer work run it in the background (nohup <cmd> > log 2>&1 & echo $!) and wait with: while kill -0 PID 2>/dev/null; do sleep 5; done (returns as soon as it ends; no fixed sleep), then read the log.`
 
 // biome-ignore lint/suspicious/noTemplateCurlyInString: expansão do shell, não do JS
 const BG_DIR = '${TMPDIR:-/tmp}/pi-bg'
