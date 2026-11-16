@@ -122,6 +122,36 @@ def paired_ci(
     return q(alpha / 2), q(1 - alpha / 2)
 
 
+AHEAD_P = 0.80  # "ahead" on a metric: P(candidate better than reference | data) >= 0.80 (owner rule)
+
+
+def prob_superior(
+    diffs: list[float],
+    lower_is_better: bool = False,
+    n_boot: int = N_BOOT,
+    seed: int = SEED,
+) -> float:
+    """P(candidato melhor que a referência | dados): bootstrap pareado agrupado por tarefa.
+
+    `diffs` = uma diferença por tarefa (taxa média das repetições; para razões, o log da razão). Reamostra tarefas
+    com semente fixa e conta as médias > 0 (< 0 se menor é melhor); média ≈ 0 vale meio, então empate exato dá 0,5."""
+    if not diffs:
+        raise ValueError("no paired tasks")
+    n, sign = len(diffs), -1.0 if lower_is_better else 1.0
+    d = [sign * x for x in diffs]
+    rng, wins, ties = random.Random(seed), 0, 0
+    for _ in range(n_boot):
+        m = sum(rng.choices(d, k=n)) / n
+        wins += m > 1e-12
+        ties += abs(m) <= 1e-12
+    return (wins + ties / 2) / n_boot
+
+
+def ahead(p: float | None) -> str:
+    """Column "à frente (P≥0,80)?": sim / não / – (no paired data)."""
+    return "–" if p is None else "sim" if p >= AHEAD_P else "não"
+
+
 def _ratio(
     base: dict[str, TaskStat],
     cand: dict[str, TaskStat],

@@ -2,9 +2,10 @@
 scoreboard of the owner's three goal rules for the ny arm against reference rounds."""
 
 import json
+import math
 import statistics
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from bench import stats
 
@@ -99,6 +100,23 @@ def _cost(pt: dict[str, stats.TaskStat]) -> float:
     return sum(t["cost"] or 0.0 for t in pt.values())
 
 
+def _log_ratios(a: dict[str, stats.TaskStat], b: dict[str, stats.TaskStat], key: Literal["cost", "wall"]) -> list[float]:  # fmt: skip
+    """log(ny / ref) of the per-task mean over tasks where both are positive (an empty list when none)."""
+    return [
+        math.log(x / y)
+        for t in sorted(a)
+        if (x := a[t][key]) and (y := b[t][key]) and x > 0 and y > 0
+    ]
+
+
+def _geo(logs: list[float]) -> float | None:
+    return math.exp(statistics.mean(logs)) if logs else None
+
+
+def _p_lower(logs: list[float]) -> float | None:
+    return stats.prob_superior(logs, lower_is_better=True) if logs else None
+
+
 def scoreboard(ny_dir: Path, ref_dirs: list[Path]) -> tuple[dict[str, Any], str]:
     """The owner's three goal rules for the ny arm against each reference round. Returns (data, Markdown).
 
@@ -119,6 +137,10 @@ def scoreboard(ny_dir: Path, ref_dirs: list[Path]) -> tuple[dict[str, Any], str]
             "diff": statistics.mean(diffs) if tasks else None,
             "ci": stats.paired_ci(diffs) if tasks else None,
             "ny_cost": ca, "ref_cost": cb, "cost_ratio": ca / cb if cb > 0 else None,
+            "p_rate": stats.prob_superior(diffs) if tasks else None,
+            "p_cost": _p_lower(_log_ratios(a, b, "cost")),
+            "p_wall": _p_lower(_log_ratios(a, b, "wall")),
+            "wall_ratio": _geo(_log_ratios(a, b, "wall")),
         })  # fmt: skip
     acc = [x for x in rows if x["arm"] == ACCURACY_REF and x["n"]]
     r1 = bool(acc) and all(x["ny_rate"] >= x["ref_rate"] for x in acc)
@@ -150,23 +172,31 @@ def scoreboard(ny_dir: Path, ref_dirs: list[Path]) -> tuple[dict[str, Any], str]
         f"## R1 acerto: {yn(r1)}", "",
         f"Regra: taxa de acerto do {ny_arm} >= taxa do {ACCURACY_REF} (taxa pontual)."
         + ("" if acc else f" Sem rodada do {ACCURACY_REF}: não avaliada."), "",
-        f"| referência | tarefas | {ny_arm} | referência | diferença | IC{ci_pct} pareado |",
-        "|---|---|---|---|---|---|",
+        f"| referência | tarefas | {ny_arm} | referência | diferença | IC{ci_pct} pareado | P(à frente) | à frente (P≥0,80)? |",
+        "|---|---|---|---|---|---|---|---|",
     ]  # fmt: skip
     for x in rows:
         ci = "n/a" if not x["ci"] else f"[{x['ci'][0]:+.3f}, {x['ci'][1]:+.3f}]"
         diff = "n/a" if x["diff"] is None else f"{x['diff']:+.3f}"
-        out.append(f"| {x['arm']} | {x['n']} | {_f(x['ny_rate'], 3)} | {_f(x['ref_rate'], 3)} | {diff} | {ci} |")  # fmt: skip
+        out.append(f"| {x['arm']} | {x['n']} | {_f(x['ny_rate'], 3)} | {_f(x['ref_rate'], 3)} | {diff} | {ci} | {_f(x['p_rate'], 3)} | {stats.ahead(x['p_rate'])} |")  # fmt: skip
     out += [
         "", f"## R2 teto de custo: {yn(r2)}", "",
         f"Regra: custo do {ny_arm} <= custo de cada referência nas mesmas tarefas; o {ACCURACY_REF} é informativo."
         + ("" if ceil else " Sem outra referência: não avaliada."), "",
-        f"| referência | {ny_arm} US$ | referência US$ | razão | conta na regra |",
-        "|---|---|---|---|---|",
+        f"| referência | {ny_arm} US$ | referência US$ | razão | conta na regra | P(à frente) | à frente (P≥0,80)? |",
+        "|---|---|---|---|---|---|---|",
     ]  # fmt: skip
     for x in rows:
         counts = "não (informativo)" if x["arm"] == ACCURACY_REF else "sim"
-        out.append(f"| {x['arm']} | {x['ny_cost']:.4f} | {x['ref_cost']:.4f} | {_f(x['cost_ratio'], 2)} | {counts} |")  # fmt: skip
+        out.append(f"| {x['arm']} | {x['ny_cost']:.4f} | {x['ref_cost']:.4f} | {_f(x['cost_ratio'], 2)} | {counts} | {_f(x['p_cost'], 3)} | {stats.ahead(x['p_cost'])} |")  # fmt: skip
+    out += [
+        "", "### Tempo (informativo)", "",
+        "P(à frente) = P(o braço é melhor | dados), bootstrap pareado por tarefa com semente fixa; em custo e tempo menor é melhor (razão por tarefa).", "",
+        f"| referência | razão de tempo ({ny_arm}/ref, média geométrica) | P(à frente) | à frente (P≥0,80)? |",
+        "|---|---|---|---|",
+    ]  # fmt: skip
+    for x in rows:
+        out.append(f"| {x['arm']} | {_f(x['wall_ratio'], 2)} | {_f(x['p_wall'], 3)} | {stats.ahead(x['p_wall'])} |")  # fmt: skip
     out += [
         "", f"## R3 exceção: {len(exclusive)} tarefa(s) exclusiva(s)", "",
         f"Regra: taxa do {ny_arm} > {EXCLUSIVE_RATE} e taxa 0 em todas as referências ({len(me)} tarefas em comum).", "",
