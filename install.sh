@@ -36,7 +36,7 @@ do_install() {
 
 # ---- --link / --restore ---------------------------------------------------------------------
 # publish.list: <target template with literal $HOME><TAB><repo path>; bin/pi lands in ~/.local/bin.
-TEMPLATES=("settings.json.example:settings.json" "mcp.json.example:mcp.json" "lsp.json.example:lsp.json" "local.env.example:local.env" "claude-home/settings.json.example:claude-home/settings.json")
+TEMPLATES=("settings.json.example:settings.json" "mcp.json.example:mcp.json" "lsp.json.example:lsp.json" "models.json.example:models.json" "local.env.example:local.env" "claude-home/settings.json.example:claude-home/settings.json")
 
 list_links() { # prints "<target>\t<repo file>"
   local dst src

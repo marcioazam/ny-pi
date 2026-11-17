@@ -37,7 +37,7 @@ echo 'personal wrapper' > "$H/.local/bin/pi"; chmod 755 "$H/.local/bin/pi"
 echo 'personal contract' > "$A/claude-home/CLAUDE.md"
 echo 'personal tdd' > "$A/claude-home/skills/tdd/SKILL.md"
 echo 'target elsewhere' > "$H/other/guard.py"; ln -s "$H/other/guard.py" "$A/claude-home/hooks/guard.py"
-echo '{"fake":"credential"}' > "$A/auth.json"; echo 'mine' > "$A/settings.json"
+echo '{"fake":"credential"}' > "$A/auth.json"; echo 'mine' > "$A/settings.json"; echo 'mylsp' > "$A/lsp.json"
 snap() { (cd "$H" && find . -path ./.pi-backup -prune -o \( -type f -printf 'f %p %m ' -exec sha256sum {} \; -o -type l -printf 'l %p -> %l\n' -o -type d -printf 'd %p\n' \) | sort); }
 snap > "$WORK/b.before"
 HOME=$H bash "$INSTALL" --link > "$WORK/b.dry" 2>&1
@@ -50,6 +50,8 @@ HOME=$H PI_HARNESS_SKIP_EXT_DEPS=1 bash "$INSTALL" --link --apply >"$WORK/b.appl
 [ "$(readlink "$H/.local/bin/pi")" = "$REPO/bin/pi" ] && [ -L "$A/claude-home/CLAUDE.md" ] && ok "b links created" || fail "b links missing"
 [ "$(cat "$A/auth.json")" = '{"fake":"credential"}' ] && [ "$(cat "$A/settings.json")" = mine ] && ok "b auth.json and existing settings.json untouched" || fail "b protected files changed"
 [ -f "$A/local.env" ] && [ "$(stat -c %a "$A/local.env")" = 600 ] && ok "b local.env template 0600" || fail "b local.env template"
+cmp -s "$REPO/models.json.example" "$A/models.json" && ok "b models.json template copied when absent" || fail "b models.json template"
+[ "$(cat "$A/lsp.json")" = mylsp ] && ok "b existing lsp.json template target untouched" || fail "b lsp.json overwritten"
 BK=$(ls -d "$H"/.pi-backup/*/ | head -n 1)
 [ -f "${BK}link-manifest.tsv" ] && [ "$(cat "${BK}replaced/.local/bin/pi")" = 'personal wrapper' ] && ok "b originals backed up before linking" || fail "b backup layout"
 [ "$(stat -c %a "$H/.pi-backup")" = 700 ] && [ "$(stat -c %a "$BK")" = 700 ] && ok "b backup dirs 0700" || fail "b backup modes"
