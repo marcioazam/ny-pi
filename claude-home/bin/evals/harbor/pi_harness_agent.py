@@ -40,6 +40,19 @@ _LOCAL_ENV_FIX = (
     'if [ -f "$f" ]; then t=$(mktemp "$f.XXXXXX") && cp "$f" "$t" && chmod 600 "$t" && mv -f "$t" "$f"; fi'
 )
 
+_MERGE_PY = (
+    "import json,os,sys;p=sys.argv[1];"
+    "d=json.load(open(p)) if os.path.exists(p) else {};"
+    "d.setdefault('providers',{}).setdefault('anthropic',{}).setdefault('headers',{})"
+    "['anthropic-workspace-id']=os.environ['WS'];"
+    "json.dump(d,open(p,'w'),indent=2)"
+)
+
+
+def _models_merge(path: str, workspace: str) -> str:
+    """Shell snippet: add the workspace header to pi's anthropic provider, keeping the rest of models.json."""
+    return f"WS={shlex.quote(workspace)} python3 -c {shlex.quote(_MERGE_PY)} {shlex.quote(path)}"
+
 
 class PiHarnessAgent(Pi):  # type: ignore[misc]
     @staticmethod
@@ -59,10 +72,15 @@ class PiHarnessAgent(Pi):  # type: ignore[misc]
         await self.exec_as_root(environment, _ROOT_DEPS)
         await environment.upload_file(bundle, _REMOTE_BUNDLE)
         # The bundle is rooted at a fixed container home, whatever user runs the task.
+        # API-key mode (bench): a user key without workspace needs the header on every call.
+        ws = os.environ.get("ANTHROPIC_WORKSPACE_ID")
+        merge = (
+            f"{_models_merge(f'{_HOME}/.pi/agent/models.json', ws)} && " if ws else ""
+        )
         await self.exec_as_root(
             environment,
             f"mkdir -p {_HOME} && tar -xzf {_REMOTE_BUNDLE} -C {_HOME} && rm {_REMOTE_BUNDLE} "
-            f"&& chmod -R a+rwX {_HOME}",
+            f"&& {merge}chmod -R a+rwX {_HOME}",
         )
         await self.exec_as_agent(
             environment,

@@ -1,6 +1,7 @@
 """pi_harness_agent without Harbor: local.env must end up 0600 and owned by the agent user."""
 
 import asyncio
+import json
 import os
 import subprocess
 import sys
@@ -84,3 +85,46 @@ def test_install_runs_fix_before_version(
     cmd = next(c for who, c in agent.calls if who == "agent")
     assert pi_harness_agent._LOCAL_ENV_FIX in cmd
     assert cmd.index(pi_harness_agent._LOCAL_ENV_FIX) < cmd.index("--version")
+
+
+def _install_cmd(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> str:
+    bundle = tmp_path / "b.tgz"
+    bundle.write_bytes(b"x")
+    monkeypatch.setenv("PI_HARNESS_BUNDLE", str(bundle))
+
+    class _Env:
+        async def upload_file(self, src: Path, dst: str) -> None:
+            pass
+
+    agent = pi_harness_agent.PiHarnessAgent()
+    asyncio.run(agent.install(_Env()))
+    return " ; ".join(c for _, c in agent.calls)
+
+
+def test_install_merges_workspace_header_when_set(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("ANTHROPIC_WORKSPACE_ID", "wrkspc_x'; rm -rf /")
+    cmd = _install_cmd(tmp_path, monkeypatch)
+    assert "models.json" in cmd and "anthropic-workspace-id" in cmd
+    assert "'wrkspc_x'\"'\"'; rm -rf /'" in cmd  # shlex-quoted, never bare
+
+
+def test_install_without_workspace_leaves_models_json(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("ANTHROPIC_WORKSPACE_ID", raising=False)
+    assert "models.json" not in _install_cmd(tmp_path, monkeypatch)
+
+
+def test_models_json_merge_snippet_preserves_existing(tmp_path: Path) -> None:
+    f = tmp_path / "models.json"
+    f.write_text('{"providers": {"anthropic": {"baseUrl": "u"}, "x": {}}}')
+    script = pi_harness_agent._models_merge(str(f), "w1")
+    assert subprocess.run(["bash", "-c", script], check=False).returncode == 0
+    d = json.loads(f.read_text())
+    assert d["providers"]["anthropic"] == {
+        "baseUrl": "u",
+        "headers": {"anthropic-workspace-id": "w1"},
+    }
+    assert "x" in d["providers"]
