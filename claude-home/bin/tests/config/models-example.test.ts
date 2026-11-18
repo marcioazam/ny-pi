@@ -1,5 +1,5 @@
 // Contrato de models.json.example (fallback de recusa do claude-sonnet-5-5 -> claude-sonnet-5).
-// Rodar: NO_COLOR=1 node --experimental-strip-types --test claude-home/bin/tests/models-example.test.ts
+// Rodar: NO_COLOR=1 node --experimental-strip-types --test claude-home/bin/tests/config/models-example.test.ts
 // Limite: buildParams do pi-ai não é exportado; o merge de compat do pi (provider-composer.js,
 // mergeCompat = {...base, ...override}) e o mapeamento params.fallbacks são replicados aqui.
 import { strict as assert } from 'node:assert'
@@ -8,7 +8,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
-const example = JSON.parse(readFileSync(new URL('../../../models.json.example', import.meta.url), 'utf8'))
+const example = JSON.parse(readFileSync(new URL('../../../../models.json.example', import.meta.url), 'utf8'))
 const override = example.providers.anthropic.modelOverrides['claude-sonnet-5-5']
 const fallback = override.compat.allowedFallbackModels[0]
 
