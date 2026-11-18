@@ -34,9 +34,11 @@ $HOME/.pi/agent/claude-home/bin/evals/harbor/bundle.sh	claude-home/bin/evals/har
 $HOME/.pi/agent/claude-home/bin/evals/harbor/omp-release.sh	claude-home/bin/evals/harbor/omp-release.sh
 $HOME/.pi/agent/claude-home/bin/evals/harbor/omp_agent.py	claude-home/bin/evals/harbor/omp_agent.py
 $HOME/.pi/agent/claude-home/bin/evals/harbor/pi_harness_agent.py	claude-home/bin/evals/harbor/pi_harness_agent.py
+$HOME/.pi/agent/claude-home/bin/evals/harbor/pi_vanilla_api_agent.py	claude-home/bin/evals/harbor/pi_vanilla_api_agent.py
 $HOME/.pi/agent/claude-home/bin/evals/harbor/run.sh	claude-home/bin/evals/harbor/run.sh
-$HOME/.pi/agent/claude-home/bin/evals/harbor/test_omp_agent.py	claude-home/bin/evals/harbor/test_omp_agent.py
-$HOME/.pi/agent/claude-home/bin/evals/harbor/test_pi_harness_agent.py	claude-home/bin/evals/harbor/test_pi_harness_agent.py
+$HOME/.pi/agent/claude-home/bin/evals/harbor/tests/test_omp_agent.py	claude-home/bin/evals/harbor/tests/test_omp_agent.py
+$HOME/.pi/agent/claude-home/bin/evals/harbor/tests/test_pi_harness_agent.py	claude-home/bin/evals/harbor/tests/test_pi_harness_agent.py
+$HOME/.pi/agent/claude-home/bin/evals/harbor/tests/test_pi_vanilla_api_agent.py	claude-home/bin/evals/harbor/tests/test_pi_vanilla_api_agent.py
 $HOME/.pi/agent/claude-home/bin/evals/plan_ab.py	claude-home/bin/evals/plan_ab.py
 $HOME/.pi/agent/claude-home/bin/evals/plan_ab_cases.jsonl	claude-home/bin/evals/plan_ab_cases.jsonl
 $HOME/.pi/agent/claude-home/bin/evals/test_plan_ab.py	claude-home/bin/evals/test_plan_ab.py
@@ -197,7 +199,10 @@ $HOME/.pi/agent/claude-home/patches/pi-code/zzzzzzz-subagent-model-effort/tracke
 $HOME/.pi/agent/claude-home/patches/pi-code/zzzzzzzz-statusline-provider.patch	claude-home/patches/pi-code/zzzzzzzz-statusline-provider.patch
 $HOME/.pi/agent/claude-home/patches/pi-code/zzzzzzzz-statusline-provider/provider.test.ts	claude-home/patches/pi-code/zzzzzzzz-statusline-provider/provider.test.ts
 $HOME/.pi/agent/claude-home/patches/pi-core/cache-warm-identity.mjs	claude-home/patches/pi-core/cache-warm-identity.mjs
+$HOME/.pi/agent/claude-home/patches/pi-core/mcp-close-grace.mjs	claude-home/patches/pi-core/mcp-close-grace.mjs
+$HOME/.pi/agent/claude-home/patches/pi-core/mcp-close-grace.test.ts	claude-home/patches/pi-core/mcp-close-grace.test.ts
 $HOME/.pi/agent/claude-home/plugins/claude-hud/statusline.mjs	claude-home/plugins/claude-hud/statusline.mjs
+$HOME/.pi/agent/claude-home/rules-ref/delivery-and-orchestration.md	claude-home/rules-ref/delivery-and-orchestration.md
 $HOME/.pi/agent/claude-home/rules-ref/docs-and-knowledge.md	claude-home/rules-ref/docs-and-knowledge.md
 $HOME/.pi/agent/claude-home/rules-ref/harness-economy.md	claude-home/rules-ref/harness-economy.md
 $HOME/.pi/agent/claude-home/rules-ref/research-and-tools.md	claude-home/rules-ref/research-and-tools.md
