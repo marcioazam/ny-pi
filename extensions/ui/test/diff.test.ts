@@ -119,6 +119,13 @@ test('comando: sem mudanças, sem UI e erro', async () => {
   assert.match(notes.pop()[0], /^\/diff falhou/)
 })
 
+// Espera por condição (git real roda em subprocesso: sem duração fixa); só o prazo falha.
+const until = async (cond: () => boolean, ms = 15000) => {
+  for (const end = Date.now() + ms; !cond(); await new Promise((r) => setTimeout(r, 5))) {
+    if (Date.now() > end) throw new Error('until: prazo esgotado')
+  }
+}
+
 test('comando abre o componente e navega', async () => {
   const cmd = register()
   let comp: any
@@ -137,7 +144,7 @@ test('comando abre o componente e navega', async () => {
     },
   }
   const p = cmd.handler('', ctx)
-  await new Promise((r) => setTimeout(r, 50))
+  await until(() => comp !== undefined && comp.render(80)[0].includes('Mudanças'))
   const list = comp.render(80)
   assert.match(list[0], /Mudanças: 5 arquivos/)
   assert.match(list[1], /^<accent>|› /)
@@ -147,7 +154,7 @@ test('comando abre o componente e navega', async () => {
   assert.match(comp.render(80)[1], /^› a\.txt/)
   comp.handleInput('\r')
   assert.match(comp.render(80)[1], /Carregando/)
-  await new Promise((r) => setTimeout(r, 200))
+  await until(() => !comp.render(80).join('\n').includes('Carregando'))
   const view = comp.render(80)
   assert.ok(view.some((l: string) => l.includes('<toolDiffAdded>+DOIS')))
   assert.ok(view.some((l: string) => l.includes('<toolDiffRemoved>-dois')))
