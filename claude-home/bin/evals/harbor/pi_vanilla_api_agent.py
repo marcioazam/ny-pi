@@ -6,15 +6,57 @@ After the stock install, merge it into models.json of pi's default dir ($HOME/.p
 The workspace id comes from the harbor process env at runtime.
 """
 
+import io
 import os
-from typing import override
+import shlex
+from typing import Any, override
 
 from harbor.agents.installed.pi import Pi  # type: ignore[import-not-found]
 from harbor.environments.base import BaseEnvironment  # type: ignore[import-not-found]
 from pi_harness_agent import _models_merge
 
+_PRINT = "pi --print --mode json "
+_TAIL = " 2>&1 </dev/null"
+
+
+def _dashdash(command: str) -> str:
+    """Put `-- ` before the trailing quoted instruction of the `pi --print` command (one linear shlex pass)."""
+    if _PRINT not in command or _TAIL not in command:
+        return command
+    head, sep, rest = command.rpartition(_TAIL)
+    head = head.rstrip()
+    src = io.StringIO(head)
+    lex = shlex.shlex(src, posix=True)
+    lex.whitespace_split = True
+    start = -1
+    try:
+        while True:
+            pos = src.tell()
+            if lex.get_token() is None:
+                break
+            start = pos
+    except ValueError:
+        return command
+    if start < 0:
+        return command
+    start += len(head[start:]) - len(head[start:].lstrip())
+    return f"{head[:start]}-- {head[start:]} {sep.lstrip()}{rest}"
+
 
 class PiVanillaApiAgent(Pi):  # type: ignore[misc]
+    """Stock pi agent whose `pi --print` gets `-- <instruction>`, as in the ny-pi arm (pi_harness_agent).
+
+    Without it an instruction starting with "-" is parsed as a pi option ("Unknown option").
+    """
+
+    @override
+    async def exec_as_agent(
+        self, environment: BaseEnvironment, command: str, **kwargs: Any
+    ) -> Any:
+        return await super().exec_as_agent(
+            environment, command=_dashdash(command), **kwargs
+        )
+
     @override
     async def install(self, environment: BaseEnvironment) -> None:
         await super().install(environment)

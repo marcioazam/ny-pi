@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import shutil
 import subprocess
 import sys
 import types
@@ -66,6 +67,37 @@ def test_no_workspace_skips_merge(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_merge_writes_header_under_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:  # fmt: skip
     monkeypatch.setenv("ANTHROPIC_WORKSPACE_ID", "w1")
     cmd = _install()[1][1]
-    assert subprocess.run(["bash", "-c", cmd], env={"HOME": str(tmp_path), "PATH": "/usr/bin:/bin"}, check=False).returncode == 0  # fmt: skip
+    assert subprocess.run(["bash", "-c", cmd], env={"HOME": str(tmp_path), "PATH": f"{Path(shutil.which('node') or '').parent}:/usr/bin:/bin"}, check=False).returncode == 0  # fmt: skip
     d = json.loads((tmp_path / ".pi/agent/models.json").read_text())
     assert d["providers"]["anthropic"]["headers"] == {"anthropic-workspace-id": "w1"}
+
+
+def test_merge_has_no_python3(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ANTHROPIC_WORKSPACE_ID", "w1")
+    assert "python3" not in _install()[1][1]
+
+
+def _print_cmd(instruction: str) -> str:
+    import shlex
+
+    return (
+        ". ~/.nvm/nvm.sh; mkdir -p /l && pi --print --mode json --session-dir /l "
+        f"--model m --thinking high {shlex.quote(instruction)} "
+        "2>&1 </dev/null | grep -v x | stdbuf -oL tee /o"
+    )
+
+
+@pytest.mark.parametrize("instr", ["- You are given X", 'it\'s a "b" task', "plain"])
+def test_print_command_gets_dashdash(instr: str) -> None:
+    import shlex
+
+    agent = pi_vanilla_api_agent.PiVanillaApiAgent()
+    asyncio.run(agent.exec_as_agent(object(), command=_print_cmd(instr)))
+    cmd = agent.calls[0][1]
+    assert f"--thinking high -- {shlex.quote(instr)} 2>&1 </dev/null | grep" in cmd
+
+
+def test_other_commands_untouched() -> None:
+    agent = pi_vanilla_api_agent.PiVanillaApiAgent()
+    asyncio.run(agent.exec_as_agent(object(), command="echo hi"))
+    assert agent.calls[0][1] == "echo hi"

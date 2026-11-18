@@ -3,7 +3,8 @@
 Fail closed: any path not proven non-functional is functional. Rules (record: docs/bench/RUNBOOK.md):
 non-functional = docs, repo tooling (CI, git hooks, release checks), the benchmark's own infra, eval infra, tests, licence
 files, markdown that is not installed, and pure-UI paths (themes, HUD, statusline, visual extensions, render-only patches).
-Instruction files installed under claude-home/ are prompts: always functional.
+Instruction files installed under claude-home/ are prompts: always functional, except record docs under claude-home/docs/
+that no instruction file cites; pi-code patches are UI only when every patched file is a UI file.
 """
 
 import fnmatch
@@ -16,6 +17,11 @@ UI = (
     "extensions/ui/*",  # editor, a11y, terminal title, /diff, /btw overlays
     "extensions/ui-visual/*",  # header, icons, tool renderers, working indicator
     "extensions/footer-no-stats.ts",
+    "extensions/sound-notify/*",  # interactive only
+    "extensions/dev-commands/*",
+    "extensions/up-dequeue/*",
+    "extensions/puxar.ts",
+    "claude-home/bin/puxar/*",
     "extensions/sticky-prompt/*",
     "claude-home/bin/hud/*",
     "claude-home/plugins/claude-hud/*",
@@ -34,6 +40,7 @@ NON_FUNCTIONAL = (
     "scripts/fixtures/*",
     "bench/*",  # not installed in the harness (publish.list has no bench/ line)
     "claude-home/bin/evals/*",  # eval infra; bundle.sh is carved out below
+    ".pre-commit-config.yaml",
     ".gitignore",
     ".gitattributes",
     ".editorconfig",
@@ -45,6 +52,10 @@ NON_FUNCTIONAL = (
 FUNCTIONAL_EXCEPTIONS = (
     "claude-home/bin/evals/harbor/bundle.sh",
 )  # builds the harness under test
+PATCH_GLOB = "claude-home/patches/pi-code/*.patch"
+# A pi-code patch is UI when every file it patches (path inside the pi-code tree) matches one of these.
+PI_CODE_UI = ("subagent/fleet-ui/*", "status-line.ts", "notify.ts", "*.md")
+DOCS_DIR = "claude-home/docs/"
 TEST_NAMES = ("*.test.ts", "*.test.mjs", "test_*.py", "*_test.py", "test_*.sh")
 
 
@@ -57,8 +68,32 @@ def installed_paths(publish_list: str) -> set[str]:
     return out
 
 
-def classify_path(p: str, installed: set[str]) -> tuple[bool, str]:
-    """(is_functional, reason)."""
+def patch_target_files(text: str) -> list[str]:
+    """Files named by the `+++ b/<file>` headers of a patch (/dev/null ignored)."""
+    out: list[str] = []
+    for ln in text.splitlines():
+        if ln.startswith("+++ b/"):
+            out.append(ln[6:].split("\t")[0].strip())
+    return out
+
+
+def referenced_docs(grep_out: str) -> set[str]:
+    """Normalize `docs/...` matches (from git grep -o) to claude-home/docs/... paths."""
+    return {
+        "claude-home/" + ln.strip().rstrip(".")
+        for ln in grep_out.splitlines()
+        if ln.strip()
+    }
+
+
+def classify_path(
+    p: str,
+    installed: set[str],
+    referenced: set[str] | None = None,
+    patch_targets: dict[str, list[str]] | None = None,
+) -> tuple[bool, str]:
+    """(is_functional, reason). referenced: claude-home/docs paths cited by installed instruction files;
+    patch_targets: patch path -> files it patches (head content)."""
     pp = PurePosixPath(p)
     if p in FUNCTIONAL_EXCEPTIONS:
         return True, "builds the harness under test"
@@ -68,6 +103,15 @@ def classify_path(p: str, installed: set[str]) -> tuple[bool, str]:
         return False, "test"
     if any(fnmatch.fnmatchcase(p, g) for g in NON_FUNCTIONAL):
         return False, "docs/tooling"
+    if fnmatch.fnmatchcase(p, PATCH_GLOB):
+        t = (patch_targets or {}).get(p)
+        if t and all(any(fnmatch.fnmatchcase(f, g) for g in PI_CODE_UI) for f in t):
+            return False, "ui"
+        return True, "pi-code patch changes behavior"
+    if p.startswith(DOCS_DIR):
+        if any(p == r or p.startswith(r.rstrip("/") + "/") for r in referenced or ()):
+            return True, "doc referenced by an instruction file"
+        return False, "record doc"
     if p.endswith(".md"):
         if p in installed or p.startswith("claude-home/"):
             return True, "instruction file installed in the harness"
@@ -76,7 +120,11 @@ def classify_path(p: str, installed: set[str]) -> tuple[bool, str]:
 
 
 def classify(
-    files: list[str], publish_changes: list[str], installed: set[str]
+    files: list[str],
+    publish_changes: list[str],
+    installed: set[str],
+    referenced: set[str] | None = None,
+    patch_targets: dict[str, list[str]] | None = None,
 ) -> tuple[bool, list[tuple[str, bool, str]]]:
     """publish_changes: destinations of the publish.list lines the PR added or removed.
     A publish.list change is non-functional only when every touched destination is a test file."""
@@ -94,7 +142,7 @@ def classify(
                 )
             )
         else:
-            fn, why = classify_path(f, installed)
+            fn, why = classify_path(f, installed, referenced, patch_targets)
             rows.append((f, fn, why))
     return (any(r[1] for r in rows) or not rows), rows
 
@@ -124,7 +172,39 @@ def evaluate(
             )
         )
     installed = installed_paths(_git(*cwd, "show", f"{head}:publish.list"))
-    return classify(files, pub, installed)
+    referenced: set[str] = set()
+    if any(f.startswith(DOCS_DIR) for f in files):
+        r = subprocess.run(
+            [
+                "git",
+                *cwd,
+                "grep",
+                "-h",
+                "-o",
+                "-E",
+                "docs/[A-Za-z0-9_./-]+",
+                head,
+                "--",
+                "claude-home/*.md",
+                ":!claude-home/docs",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if r.returncode not in (0, 1):  # 1 = nothing found
+            raise subprocess.CalledProcessError(
+                r.returncode, r.args, r.stdout, r.stderr
+            )
+        referenced = referenced_docs(r.stdout)
+    targets: dict[str, list[str]] = {}
+    for f in files:
+        if fnmatch.fnmatchcase(f, PATCH_GLOB):
+            try:
+                targets[f] = patch_target_files(_git(*cwd, "show", f"{head}:{f}"))
+            except subprocess.CalledProcessError:
+                pass  # removed in head: functional
+    return classify(files, pub, installed, referenced, targets)
 
 
 def render(functional: bool, rows: list[tuple[str, bool, str]]) -> str:

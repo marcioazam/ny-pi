@@ -64,6 +64,11 @@ Trocar OAuth por API muda o pedido do pi (sem a identidade do Claude Code no sys
    statusline, extensões visuais, patches só de renderização), o status vira `success` com "N/A: sem mudança
    funcional" e um comentário lista os arquivos; nada roda. Fail closed: caminho desconhecido, `*.md` instalado no
    harness (`claude-home/**`, prompts), `publish.list` que instala ou remove algo e erro do classificador contam como funcional.
+   Refinamentos: `claude-home/docs/**` é registro (não funcional), salvo se algum `.md` de instrução instalado sob
+   `claude-home/` (fora de `docs/`) citar o caminho (`docs/...`, ou o diretório que o contém) no head; extensões só
+   interativas (`sound-notify`, `dev-commands`, `up-dequeue`, `puxar`) e `.pre-commit-config.yaml` não contam; um
+   `claude-home/patches/pi-code/*.patch` é UI só se todo arquivo que ele altera (`+++ b/...` no head) for
+   `subagent/fleet-ui/*`, `status-line.ts`, `notify.ts` ou `*.md`; patch sem alvos ou removido é funcional.
 6. Modo chave de API no `bench-pr.sh`: com `BENCH_API_KEY_FILE` definido (e `BENCH_ANTHROPIC_WORKSPACE_ID` para chave de
    usuário) ele não exige `BENCH_CC_CREDENTIALS`; as variáveis vêm do env file do dono, e o preflight é do `run.py`.
 

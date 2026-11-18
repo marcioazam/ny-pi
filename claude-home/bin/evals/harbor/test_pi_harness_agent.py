@@ -117,6 +117,30 @@ def test_install_without_workspace_leaves_models_json(
     assert "models.json" not in _install_cmd(tmp_path, monkeypatch)
 
 
+def test_merge_snippet_has_no_python3() -> None:
+    assert "python3" not in pi_harness_agent._models_merge("/x/models.json", "w1")
+
+
+def test_install_merges_in_agent_after_nvm_not_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # task images may lack python3 and node is only installed by the nvm snippet
+    monkeypatch.setenv("ANTHROPIC_WORKSPACE_ID", "w1")
+    bundle = tmp_path / "b.tgz"
+    bundle.write_bytes(b"x")
+    monkeypatch.setenv("PI_HARNESS_BUNDLE", str(bundle))
+
+    class _Env:
+        async def upload_file(self, src: Path, dst: str) -> None:
+            pass
+
+    agent = pi_harness_agent.PiHarnessAgent()
+    asyncio.run(agent.install(_Env()))
+    assert not any("anthropic-workspace-id" in c for w, c in agent.calls if w == "root")
+    cmd = next(c for w, c in agent.calls if w == "agent")
+    assert cmd.index("NVM") < cmd.index("anthropic-workspace-id")
+
+
 def test_models_json_merge_snippet_preserves_existing(tmp_path: Path) -> None:
     f = tmp_path / "models.json"
     f.write_text('{"providers": {"anthropic": {"baseUrl": "u"}, "x": {}}}')
