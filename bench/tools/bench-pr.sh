@@ -27,8 +27,9 @@ case "$mode" in
   ;;
 esac
 
-if [[ -z ${BENCH_CC_CREDENTIALS:-} ]]; then
-  echo "bench-pr: BENCH_CC_CREDENTIALS is not set (path of the Claude credentials file; see docs/bench/RUNBOOK.md)" >&2
+# API-key mode (BENCH_API_KEY_FILE, + BENCH_ANTHROPIC_WORKSPACE_ID): run.py preflights the key; no OAuth file needed.
+if [[ -z ${BENCH_API_KEY_FILE:-} && -z ${BENCH_CC_CREDENTIALS:-} ]]; then
+  echo "bench-pr: set BENCH_API_KEY_FILE (API-key mode) or BENCH_CC_CREDENTIALS (path of the Claude credentials file); see docs/bench/RUNBOOK.md" >&2
   exit 2
 fi
 
@@ -64,6 +65,29 @@ run_pr() {
   post() { (cd "$wt" && python3 bench/run.py post-status --pr "$n" --state "$1" --description "$2"); }
   cleanup() { git -C "$STATE/repo" worktree remove --force "$wt" || true; }
 
+  # Declared policy (owner, 2026-11-17): the benchmark runs only for PRs that change the harness's functional behavior.
+  # Anything the classifier cannot read counts as functional (fail closed).
+  mkdir -p "$out"
+  verdict=$(cd "$wt" && python3 bench/run.py affects --base main --head "$sha" 2>/dev/null) || verdict=functional
+  if [[ $(head -n1 <<<"$verdict") == non-functional ]]; then
+    {
+      echo "## bench-pr: N/A"
+      echo
+      echo "Sem mudança funcional no harness: o benchmark não rodou (política do dono, 2026-11-17). Arquivos:"
+      echo
+      echo '```'
+      tail -n +2 <<<"$verdict"
+      echo '```'
+    } >"$out/na.md"
+    post success "N/A: sem mudança funcional" || {
+      cleanup
+      return 1
+    }
+    gh pr comment "$n" --repo "$REPO" --body-file "$out/na.md" >/dev/null || true
+    cleanup
+    return 0
+  fi
+
   post pending "bench-pr em execução" || {
     cleanup
     return 1
@@ -85,7 +109,9 @@ run_pr() {
   fi
 
   rc=0
-  # One extension (+3 candidate reps): accuracy in doubt, or a single failed rep of a security task.
+  # Sequential gate (RUNBOOK "Gate sequencial"): the run above is look 1 (k1, security k3). When look 1 does not decide,
+  # the gate calls this command to complete k3 (+2) and, if still in doubt, +3 on the discordant tasks (or a single failed
+  # security rep); each call runs only the tasks and reps the gate names in BENCH_EXTEND_*.
   ext="python3 bench/run.py run --extension --arm ny-pi --tier pr --model '$MODEL' --budget-usd '$EXT_BUDGET' >&2"
   (cd "$wt" && python3 bench/run.py gate --base "$base" --cand "$out" --extend-with-cmd "$ext") >"$out/summary.md" || rc=$?
   case $rc in
@@ -97,7 +123,7 @@ run_pr() {
   *) state=error desc="gate exit $rc" ;;
   esac
   if [[ -f $out/verdict.json ]]; then
-    desc="$desc $(jq -r '"n=\(.n)"' "$out/verdict.json" 2>/dev/null || true)"
+    desc="$desc $(jq -r '"n=\(.n) olhar=\(.look // "-")"' "$out/verdict.json" 2>/dev/null || true)"
   fi
   post "$state" "$desc" || true
   # The full summary goes on the PR; the status description stays short and without local paths.
