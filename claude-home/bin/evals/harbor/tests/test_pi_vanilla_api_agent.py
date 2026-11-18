@@ -35,7 +35,7 @@ _stub("harbor.agents.installed.pi", Pi=_Pi)
 _stub("harbor.agents.installed.node_install", nvm_node_install_snippet=lambda: "NVM")
 _stub("harbor.environments.base", BaseEnvironment=object)
 sys.path.insert(0, str(Path(__file__).parent.parent))
-import pi_vanilla_api_agent
+import pi_vanilla_api_agent  # type: ignore[import-not-found]  # CI mypy runs with MYPYPATH=tests/
 
 
 def _install() -> list[tuple[str, str]]:
