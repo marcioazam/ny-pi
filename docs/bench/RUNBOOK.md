@@ -60,8 +60,8 @@ Trocar OAuth por API muda o pedido do pi (sem a identidade do Claude Code no sys
 3. Um lock (`$BENCH_STATE/lock`) impede duas execuções simultâneas (PR, nightly e vanilla).
 4. Fila única (2026-11-18): integre a main e rode o gate de um PR só depois do merge do anterior. Mesclar outro
    PR no meio faz o merge recusar (`base_moved`) e o gate precisa rodar de novo no head integrado.
-4. Rodar um PR à mão: `bench-pr.sh --pr N` (ignora o status final e reroda).
-5. Contrato mudou em 2026-11-17 por decisão do dono: o benchmark só roda quando o PR muda o comportamento funcional do
+5. Rodar um PR à mão: `bench-pr.sh --pr N` (ignora o status final e reroda).
+6. Contrato mudou em 2026-11-17 por decisão do dono: o benchmark só roda quando o PR muda o comportamento funcional do
    harness. Antes do `pending`, `bench run affects` (`bench/classify/affects.py`) lê `git diff base...head`: se todo arquivo for
    documentação, teste, CI/ferramental do repositório, infra do próprio bench, licença ou só UI (temas, HUD,
    statusline, extensões visuais, patches só de renderização), o status vira `success` com "N/A: sem mudança
@@ -72,7 +72,7 @@ Trocar OAuth por API muda o pedido do pi (sem a identidade do Claude Code no sys
    interativas (`sound-notify`, `dev-commands`, `up-dequeue`, `puxar`) e `.pre-commit-config.yaml` não contam; um
    `claude-home/patches/pi-code/*.patch` é UI só se todo arquivo que ele altera (`+++ b/...` no head) for
    `subagent/fleet-ui/*`, `status-line.ts`, `notify.ts` ou `*.md`; patch sem alvos ou removido é funcional.
-6. Modo chave de API no `bench-pr.sh`: com `BENCH_API_KEY_FILE` definido (e `BENCH_ANTHROPIC_WORKSPACE_ID` para chave de
+7. Modo chave de API no `bench-pr.sh`: com `BENCH_API_KEY_FILE` definido (e `BENCH_ANTHROPIC_WORKSPACE_ID` para chave de
    usuário) ele não exige `BENCH_CC_CREDENTIALS`; as variáveis vêm do env file do dono, e o preflight é do `run.py`.
 
 | Exit do gate | Status | Significado |
