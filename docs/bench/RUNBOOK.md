@@ -39,6 +39,14 @@ Pré-requisitos no PATH: `gh` autenticado como o dono do repositório, `git`, `j
 | `BENCH_JOBS` | não | paralelismo da rodada (default 4); tem de ser igual ao `jobs` do `baseline-main` (hoje 6), senão o gate dá NOT_COMPARABLE |
 | `BENCH_PR_BUDGET` | não | teto em US$ da rodada de PR (default 12) |
 
+O token OAuth da conta de benchmark só é renovado entre braços, nunca durante um braço: a renovação revoga o token que os contêineres em execução copiaram (2026-11-16: 5 execuções do braço Claude Code com 401 "OAuth token revoked").
+Braços ny-pi podem rodar em paralelo: cada rodada grava o próprio pacote em `<out>/pi-harness-bundle.tgz`.
+
+Modo chave de API (opcional, todos os braços): `BENCH_API_KEY_FILE=<arquivo com a chave>` cobra o crédito de API em vez do plano e dispensa `BENCH_CC_CREDENTIALS`.
+Vale também para as suítes locais (s1/s4/s5): os braços `ny-pi`, `pi-vanilla` e `claude-vanilla` leem a chave de `BENCH_API_KEY_FILE` (arquivo vazio ou ilegível aborta), removem os tokens OAuth do ambiente e não chamam `bench_oauth_token`; sem a variável, seguem no OAuth do plano. O workspace vai em `ANTHROPIC_CUSTOM_HEADERS` no `claude-vanilla` e em `providers.anthropic.headers` do `models.json` (mesclado a cada execução, sem tocar no resto) no `pi-vanilla` e no `ny-pi`; `models.json` não entra no `.overlay-sha`.
+Chave de usuário sem workspace exige `BENCH_ANTHROPIC_WORKSPACE_ID=<id>`, enviado como cabeçalho `anthropic-workspace-id` em toda chamada: o `ny-pi` grava-o no `models.json` do contêiner; o `cc-vanilla` usa `ANTHROPIC_API_KEY` mais `ANTHROPIC_CUSTOM_HEADERS` (via `--ae` do Harbor), sem `CLAUDE_FORCE_OAUTH`; o `pi-vanilla` roda com `pi_vanilla_api_agent.py`, que mescla o cabeçalho no `models.json` depois da instalação padrão.
+Trocar OAuth por API muda o pedido do pi (sem a identidade do Claude Code no system prompt e sem renomear ferramentas): não misture modos dentro de um braço nem de uma comparação.
+
 ## Fluxo do PR
 
 1. A cada 10 min `bench-pr.timer` chama `bench-pr.sh --poll`. Só entram PRs abertos do mesmo repositório e do dono;
@@ -51,6 +59,19 @@ Pré-requisitos no PATH: `gh` autenticado como o dono do repositório, `git`, `j
    estado é reconferido: PR fechado depois da listagem não roda.
 3. Um lock (`$BENCH_STATE/lock`) impede duas execuções simultâneas (PR, nightly e vanilla).
 4. Rodar um PR à mão: `bench-pr.sh --pr N` (ignora o status final e reroda).
+5. Contrato mudou em 2026-11-17 por decisão do dono: o benchmark só roda quando o PR muda o comportamento funcional do
+   harness. Antes do `pending`, `bench run affects` (`bench/classify/affects.py`) lê `git diff base...head`: se todo arquivo for
+   documentação, teste, CI/ferramental do repositório, infra do próprio bench, licença ou só UI (temas, HUD,
+   statusline, extensões visuais, patches só de renderização), o status vira `success` com "N/A: sem mudança
+   funcional" e um comentário lista os arquivos; nada roda. Fail closed: caminho desconhecido, `*.md` instalado no
+   harness (`claude-home/**`, prompts), `publish.list` que instala ou remove algo e erro do classificador contam como funcional.
+   Refinamentos: `claude-home/docs/**` é registro (não funcional), salvo se algum `.md` de instrução instalado sob
+   `claude-home/` (fora de `docs/`) citar o caminho (`docs/...`, ou o diretório que o contém) no head; extensões só
+   interativas (`sound-notify`, `dev-commands`, `up-dequeue`, `puxar`) e `.pre-commit-config.yaml` não contam; um
+   `claude-home/patches/pi-code/*.patch` é UI só se todo arquivo que ele altera (`+++ b/...` no head) for
+   `subagent/fleet-ui/*`, `status-line.ts`, `notify.ts` ou `*.md`; patch sem alvos ou removido é funcional.
+6. Modo chave de API no `bench-pr.sh`: com `BENCH_API_KEY_FILE` definido (e `BENCH_ANTHROPIC_WORKSPACE_ID` para chave de
+   usuário) ele não exige `BENCH_CC_CREDENTIALS`; as variáveis vêm do env file do dono, e o preflight é do `run.py`.
 
 | Exit do gate | Status | Significado |
 | --- | --- | --- |
@@ -65,6 +86,11 @@ Sem baseline main, run que falha ou exit inesperado também viram `error` (fail 
 ## Regra do gate (Precisa)
 
 Decisão do dono; substitui a regra de acerto D6. Constantes em `bench/stats.py`, extensão em `bench/gate.py`.
+
+> **Substituída como fluxo de PR (2026-11-18) pelo "Gate sequencial", abaixo.** Esta regra continua valendo
+> exatamente como escrita a partir do olhar 2 (candidato k3); o que mudou é o que roda antes dela. As frases
+> "candidato com k=3 (tier `pr`)" e "uma única extensão de +3" abaixo descrevem o fluxo antigo: hoje o tier `pr`
+> roda k1 (segurança k3) e a extensão de +3 é o olhar 3.
 
 - Acerto: diferença pareada por tarefa (taxa do PR menos taxa da base), intervalo bilateral de 90% (bootstrap BCa).
 - PASS quando o limite inferior fica acima de -10 pp; FAIL quando o limite superior fica abaixo de -10 pp.
@@ -112,6 +138,7 @@ Decisão do dono; substitui a regra de acerto D6. Constantes em `bench/stats.py`
   A/B intercalado na mesma máquina.
 - Lacuna conhecida (pendência): a sobrecarga local (início do processo, hooks, ferramentas) deixa de ser coberta pelo
   gate até existir a checagem de latência sem modelo (API falsa, base e PR intercalados na mesma máquina).
+- Medidor local de sobrecarga (sem modelo): `python3 bench/contract/speed.py --arms ny-pi,pi-vanilla --reps 7` (`--cold` para stage e cache novos); ver `bench/contract/README.md`.
 - Cobertura da regra de turnos: a rodada de referência atual só tem turnos em S4 e S5 (22 das 42 tarefas). O S1
   passa a gravar turnos e tokens a partir desta mudança e entra na regra quando a referência for regravada; o S2
   (Harbor) não tem o dado. Até lá, as outras 20 tarefas ficam só com a regra de custo, que cobre as 42.
@@ -123,7 +150,94 @@ Medição que justificou a troca (simulação sobre a rodada real do ny-pi, 42 t
 | antiga: base k2, candidato k2+2, -6 pp, IC95 | 41% | 97% | não medido |
 | nova: base k12, candidato k3+3, -10 pp, IC90 | 98% | 96% | 100% |
 
-A regra nova custa cerca de 146 execuções por PR.
+A regra nova custa cerca de 146 execuções por PR (fluxo de k3 direto; o sequencial está na próxima seção).
+
+## Gate sequencial
+
+Decisão do dono (2026-11-18): gastar menos no `bench-pr` sem perder a detecção de queda de acerto, regressão de
+segurança e aumento de custo ou turnos. A base (k=12) não muda; a linha de base atual continua válida.
+
+Desenho: análise pareada por tarefa mais desenho sequencial em grupo pré-registrado, com critério mais estrito no
+olhar interino. O código decide por `bench.gate.decide`; as constantes ficam em `bench/stats.py`
+(`ALPHA1, COST1, TURNS1`).
+
+- **Olhar 1** (o `bench run --tier pr`): candidato k1 em todas as tarefas; casos de segurança do S1 sempre k3
+  (`k_security` em `bench/suites.toml`); Harbor (S2) k1, como antes. Decide só quando:
+  - PASS antecipado: limite inferior do IC pareado a α1 = 0,01 (IC99) acima de -10 pp **e** razão de custo ≤ 1,05
+    **e** razão de turnos ≤ 1,05 **e** segurança PASS;
+  - FAIL antecipado: limite superior do IC99 abaixo de -10 pp, ou regressão de segurança confirmada (duas falhas);
+  - NOT_COMPARABLE e NOT_VERIFIED encerram. Qualquer outro caso segue para o olhar 2.
+- **Olhar 2**: completa k3 (+2 repetições) nas tarefas que não são de segurança nem Harbor e aplica exatamente a
+  regra "Precisa" (IC90, -10 pp, 1,10, segurança).
+- **Olhar 3**: a extensão atual (+3 nas tarefas discordantes ou na tarefa de segurança com uma falha) quando o
+  olhar 2 é INCONCLUSIVE; continua inconclusivo vira FAIL.
+- O resumo diz em qual olhar parou ("Parou no olhar N de 3") e `verdict.json` leva `look` e `alpha`.
+- Sem `--extend-with-cmd`, um olhar 1 que não decide fica INCONCLUSIVE (nunca PASS).
+- `bench-pr.sh` não mudou de fluxo: o mesmo comando de extensão serve ao olhar 2 e ao olhar 3 (`BENCH_EXTEND_*`).
+
+### Calibração por simulação
+
+`python3 bench/tools/gate_sim.py <runs.jsonl>...` (offline, sem modelo; os caminhos vêm por argumento). Modelo: por
+tarefa, p = (s + 0,5)/(n + 1) sobre a base real; custo e turnos reamostrados das execuções observadas; a cada
+iteração base nova k=12 ~ Bernoulli(p) e candidato ~ Bernoulli(p + efeito); as duas regras veem os mesmos sorteios do
+candidato (o Δ pareado quase não tem ruído de Monte Carlo). 10 000 iterações por cenário, seed 20261113, bootstrap
+de 2 000 reamostras dentro da simulação por velocidade (o gate real usa 10 000). Grade: α1 ∈ {0,02, 0,01, 0,005},
+C1 e T1 ∈ {1,00, 1,05}. Critério: nenhuma taxa da regra nova abaixo da atual além do erro de Monte Carlo
+(Δ + 1,96 EP ≥ 0).
+
+Escolha: **α1 = 0,01, C1 = 1,05, T1 = 1,05**. Com α1 = 0,02 a base `0ed4943` ficou fora do critério (Δ -0,07 ± 0,05 pp
+na queda concentrada); α1 ≤ 0,01 passa nas duas bases. C1 e T1 em 1,05 só poupam execuções (cerca de 1 por PR) sem
+custar taxa; 1,00 também passa.
+
+Base `docs/bench/baseline-main` (42 tarefas); "taxa" é aprovação no cenário sem mudança e bloqueio nos demais. IC95
+de Wilson; Δ = nova − atual, pareado, ±1,96 EP:
+
+| Cenário | Taxa atual [IC95] | Taxa nova [IC95] | Δ pareado | Exec. atual | Exec. nova |
+| --- | --- | --- | --- | --- | --- |
+| sem mudança (aprova) | 77,9% [77,1; 78,7] | 77,9% [77,1; 78,7] | +0,00 ± 0,00 pp | 126,3 | 116,5 |
+| queda uniforme -10 pp | 88,3% [87,6; 88,9] | 88,2% [87,6; 88,9] | -0,01 ± 0,02 pp | 156,7 | 144,3 |
+| queda uniforme -15 pp | 98,6% [98,3; 98,8] | 98,6% [98,3; 98,8] | +0,00 ± 0,00 pp | 144,0 | 122,8 |
+| 30% das tarefas -35 pp | 96,7% [96,3; 97,0] | 96,7% [96,3; 97,0] | -0,01 ± 0,02 pp | 146,3 | 124,8 |
+| custo ×1,15 | 100,0% | 100,0% | +0,00 ± 0,00 pp | 110,0 | 108,7 |
+| turnos ×1,15 | 100,0% | 100,0% | +0,00 ± 0,00 pp | 110,0 | 108,7 |
+| segurança falha 15% | 33,7% [32,8; 34,7] | 33,7% [32,8; 34,7] | +0,00 ± 0,00 pp | 126,5 | 115,6 |
+| segurança falha 30% | 49,1% [48,1; 50,1] | 49,1% [48,1; 50,1] | -0,01 ± 0,02 pp | 125,7 | 111,3 |
+
+Base `0ed4943` (41 tarefas), mesmo método: Δ entre +0,00 e -0,02 ± 0,03 pp em todos os cenários (pior: queda
+concentrada, 95,6% nos dois); execuções sem mudança 125,1 → 114,6; -10 pp 154,6 → 142,1; -15 pp 141,5 → 120,2;
+concentrada 143,8 → 121,9; segurança 15% 125,7 → 115,0; 30% 124,6 → 110,1.
+
+Economia esperada: cerca de 10 execuções por PR sem mudança (-8%), 12 a 22 nas quedas reais (-8% a -15%). É
+menor que a esperada de início porque o k3 completo continua sendo o caminho quando o olhar 1 não decide.
+
+Leitura honesta dos números: neste modelo (base reamostrada com encolhimento, tarefas 100% não determinísticas) a regra
+atual aprova um PR sem mudança em 78%, não 98%, e barra -10 pp em 88%, não 96%; a simulação anterior (citada acima)
+usava outro modelo e não é comparável. O que a calibração garante é que a regra nova não piora a atual, não que
+ambas tenham os valores antigos. Em cerca de 18% dos PRs sem mudança o olhar 1 aprova sozinho; nos cenários de queda
+ele reprova cedo em cerca de 40%.
+
+### Pesquisa
+
+- Jennison & Turnbull, *Group Sequential Methods with Applications to Clinical Trials* (2000): olhares interinos
+  pré-registrados com critério mais estrito no olhar antecipado preservam o erro do teste final.
+- FDA, *Non-Inferiority Clinical Trials to Establish Effectiveness* (<https://www.fda.gov/media/78504/download>):
+  margem pré-fixada e limite do IC contra a margem, como o -10 pp.
+- "Efficient Benchmarking in Production", arXiv 2609.21267: subconjunto de tarefas ou IRT servem para ranquear, não para
+  um gate de regressão, porque perdem a queda concentrada em poucas tarefas; por isso o gate mantém todas as tarefas e
+  economiza em repetições.
+- Alocação adaptativa só pré-registrada: as regras e as constantes acima são fixas antes de olhar os dados do PR.
+
+### Riscos e lacunas
+
+- O α1 não foi derivado por uma função de gasto de alfa; é calibrado por simulação contra a regra atual. O erro tipo I
+  final depende do modelo de base reamostrada, não de um limite teórico.
+- A segurança com falha de 15% é barrada em apenas 34% dos PRs (tanto na regra atual quanto na nova): a regra de
+  segurança não mudou e continua fraca para falhas raras.
+- O olhar 1 usa o IC pareado com k1 no candidato e k12 na base; com α1 = 0,01 e 42 tarefas o IC99 é largo, por isso
+  decide poucas vezes cedo.
+- Custo e turnos usam a mediana das razões por tarefa com k1: ruído maior que no k3, mitigado por C1 e T1 serem
+  mais estritos que o limite final e por só PASS exigir C1/T1.
+- Não houve rodada real do gate sequencial; a simulação é offline.
 
 ## Tier baseline
 
