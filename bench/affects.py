@@ -127,18 +127,21 @@ def classify(
     patch_targets: dict[str, list[str]] | None = None,
 ) -> tuple[bool, list[tuple[str, bool, str]]]:
     """publish_changes: destinations of the publish.list lines the PR added or removed.
-    A publish.list change is non-functional only when every touched destination is a test file."""
+    A publish.list change is non-functional only when every touched destination is itself non-functional."""
     rows: list[tuple[str, bool, str]] = []
     for f in files:
         if f == "publish.list":
-            tests = bool(publish_changes) and all(
-                classify_path(d, set()) == (False, "test") for d in publish_changes
+            inert = bool(publish_changes) and not any(
+                classify_path(d, installed, referenced, patch_targets)[0]
+                for d in publish_changes
             )
             rows.append(
                 (
                     f,
-                    not tests,
-                    "only test paths" if tests else "installs or removes harness files",
+                    not inert,
+                    "only non-functional paths"
+                    if inert
+                    else "installs or removes harness files",
                 )
             )
         else:

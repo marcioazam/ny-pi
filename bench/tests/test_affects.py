@@ -204,3 +204,21 @@ def test_cli_against_real_git(
         == 0
     )
     assert capsys.readouterr().out.splitlines()[0] == "functional"
+
+
+def test_publish_list_non_functional_destinations_are_non_functional() -> None:
+    # eval infra (bench harness adapters) and UI files installed by publish.list do not change the agent
+    assert (
+        verdict(
+            "publish.list", pub=["claude-home/bin/evals/harbor/pi_vanilla_api_agent.py"]
+        )
+        is False
+    )
+    assert (
+        verdict("publish.list", pub=["themes/x.json", "extensions/x/index.test.ts"])
+        is False
+    )
+    assert (
+        verdict("publish.list", pub=["claude-home/bin/evals/harbor/bundle.sh"]) is True
+    )
+    assert verdict("publish.list", pub=["claude-home/skills/x/SKILL.md"]) is True
