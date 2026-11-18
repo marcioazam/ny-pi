@@ -41,7 +41,7 @@ for _n in ("harbor", "harbor.agents", "harbor.agents.installed", "harbor.environ
 _stub("harbor.agents.installed.pi", Pi=_Pi)
 _stub("harbor.agents.installed.node_install", nvm_node_install_snippet=lambda: "NVM")
 _stub("harbor.environments.base", BaseEnvironment=object)
-sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 import pi_harness_agent
 
 

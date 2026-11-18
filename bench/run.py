@@ -3,7 +3,7 @@
 
   run          run a tier for one arm (--dry-run prints the plan and the estimated cost, runs nothing)
   gate         paired verdict of a candidate round against the frozen base round + summary (bench/gate.py)
-  affects      functional|non-functional verdict of a PR diff (bench/affects.py); bench-pr skips non-functional PRs
+  affects      functional|non-functional verdict of a PR diff (bench/classify/affects.py); bench-pr skips non-functional PRs
   post-status  publish the `bench-pr` commit status of a PR (L1: owner-authored PRs only)
   report       tables per suite and arm from rounds, used for the BASELINE
   scoreboard   the owner's three goal rules (accuracy, cost ceiling, exception) of ny-pi against reference rounds
@@ -32,7 +32,8 @@ from typing import Any
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from bench import affects, evidence, gate, report, runners
+from bench import evidence, gate, report, runners
+from bench.classify import affects
 
 BENCH = Path(__file__).resolve().parent
 REPO = BENCH.parent

@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from bench import affects
 from bench import run as rb
+from bench.classify import affects
 
 PUB = (
     "$HOME/.pi/agent/claude-home/CLAUDE.md\tclaude-home/CLAUDE.md\n"

@@ -59,7 +59,7 @@ Trocar OAuth por API muda o pedido do pi (sem a identidade do Claude Code no sys
 3. Um lock (`$BENCH_STATE/lock`) impede duas execuções simultâneas (PR, nightly e vanilla).
 4. Rodar um PR à mão: `bench-pr.sh --pr N` (ignora o status final e reroda).
 5. Contrato mudou em 2026-11-17 por decisão do dono: o benchmark só roda quando o PR muda o comportamento funcional do
-   harness. Antes do `pending`, `bench run affects` (`bench/affects.py`) lê `git diff base...head`: se todo arquivo for
+   harness. Antes do `pending`, `bench run affects` (`bench/classify/affects.py`) lê `git diff base...head`: se todo arquivo for
    documentação, teste, CI/ferramental do repositório, infra do próprio bench, licença ou só UI (temas, HUD,
    statusline, extensões visuais, patches só de renderização), o status vira `success` com "N/A: sem mudança
    funcional" e um comentário lista os arquivos; nada roda. Fail closed: caminho desconhecido, `*.md` instalado no

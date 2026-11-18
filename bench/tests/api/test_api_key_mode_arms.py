@@ -4,8 +4,8 @@ from pathlib import Path
 
 from bench import run as rb
 from bench import runners as rn
+from bench.tests.api.test_api_key_mode import _boom, _step, keyfile  # noqa: F401
 from bench.tests.helpers import MP
-from bench.tests.test_api_key_mode import _boom, _step, keyfile  # noqa: F401
 
 HD = Path("/hd")
 HDR = "ANTHROPIC_CUSTOM_HEADERS=anthropic-workspace-id: wrkspc_1"
