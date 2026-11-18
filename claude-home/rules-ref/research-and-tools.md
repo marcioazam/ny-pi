@@ -5,6 +5,7 @@ and say when a route is unavailable. Skills named here exist only if installed; 
 
 ## Web search (every search)
 
+- Local code search and facts that need no source are not web searches. Installed tools are not a mandate: use `agent-routing` when tool routes compete, and avoid speculative utilities, components and documentation.
 - Use the search providers configured in `mcp.json`. When more than one is configured, run at least two independent ones in the same turn (a page fetch or API read is a reader, not the second provider). Latest versions, prices, dates and news always need a search, never memory.
 - Optional: the skill `deep-search` keeps a provider table (`references/providers.md`) with per-task rows, fallback order, readers and limits; when present it is the only provider list. The skill `perplexity-urls` (optional) holds the contract for Perplexity-first routing.
 - Read the source text, not the snippet, with `web_fetch` or a configured reader. Record the provider per claim.
