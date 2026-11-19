@@ -1,6 +1,6 @@
 /**
  * Esforço no plano: na sessão headless de topo (`pi -p`), raciocínio `high` só nos primeiros N turnos (ler a tarefa e
- * planejar) e o nível da sessão depois. Ligado por padrão; PI_EFFORT_SANDWICH=0 desliga. PI_EFFORT_SANDWICH_TURNS=N
+ * planejar) e o nível da sessão depois. Opt-in: PI_EFFORT_SANDWICH=1 liga. PI_EFFORT_SANDWICH_TURNS=N
  * (padrão 1). Nível inicial >= high: nada muda. Medição e contrato: docs/specs/0009-effort-sandwich.md.
  * Reverter: apagar este diretório (e as linhas dele em publish.list e docs/specs/0005-core-scope.md).
  */
@@ -21,7 +21,7 @@ export function levelFor(turn: number, initial: string, turns: number): string {
 }
 
 export default function (pi: ExtensionAPI) {
-  if (process.env.PI_EFFORT_SANDWICH === '0') return
+  if (process.env.PI_EFFORT_SANDWICH !== '1') return
   const turns = turnsFromEnv(process.env.PI_EFFORT_SANDWICH_TURNS)
   let initial: string | undefined
   pi.on('turn_start', (event, ctx) => {

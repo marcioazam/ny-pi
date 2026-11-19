@@ -50,14 +50,16 @@ function setup(env: Record<string, string | undefined>, hasUI: boolean, initial:
   return { turn, sets, restore, handlers }
 }
 
-test('PI_EFFORT_SANDWICH=0: nenhum handler registrado', () => {
-  const s = setup({ PI_EFFORT_SANDWICH: '0' }, false, 'low')
-  assert.deepEqual(Object.keys(s.handlers), [])
-  s.restore()
+test('sem a env ou com PI_EFFORT_SANDWICH=0: nenhum handler registrado', () => {
+  for (const v of [undefined, '0']) {
+    const s = setup({ PI_EFFORT_SANDWICH: v }, false, 'low')
+    assert.deepEqual(Object.keys(s.handlers), [])
+    s.restore()
+  }
 })
 
-test('padrão (sem a env), headless de topo: high só no turno 0, volta a medium no turno 1', () => {
-  const s = setup({ PI_EFFORT_SANDWICH: undefined, PI_EFFORT_SANDWICH_TURNS: undefined }, false, 'medium')
+test('ligado com TURNS padrão, headless de topo: high só no turno 0, volta a medium no turno 1', () => {
+  const s = setup({ PI_EFFORT_SANDWICH: '1', PI_EFFORT_SANDWICH_TURNS: undefined }, false, 'medium')
   for (let i = 0; i < 4; i++) s.turn(i)
   assert.deepEqual(s.sets, ['high', 'medium'])
   s.restore()
