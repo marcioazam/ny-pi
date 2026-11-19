@@ -5,13 +5,17 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import ext, {
+  dropUnused,
   HEADLESS_PROMPT,
   headlessFloor,
   headlessTools,
+  isTopLevelHeadless,
   NO_PLAN_MODE,
   NO_UI_QUESTION,
   rewriteResult,
   splitCwd,
+  trimDocs,
+  trimTools,
 } from './index.ts'
 
 const CC = { type: 'ephemeral' }
@@ -116,6 +120,20 @@ test('headlessTools tira question sempre e plan_mode_complete fora do modo plano
   assert.deepEqual(headlessTools(active, ['-p', '/planeta', '--planner']), ['read', 'bash', 'lsp_hover', 'codemode'])
 })
 
+test('dropUnused tira as ferramentas sem uso em execução sem interface (0 de 2.091 chamadas guardadas)', () => {
+  const keep = ['read', 'bash', 'edit', 'write', 'web_fetch', 'todo', 'codemode', 'tool_search']
+  const lsp = ['lsp_diagnostics', 'lsp_hover', 'lsp_definition', 'lsp_references', 'lsp_symbols']
+  assert.deepEqual(dropUnused([...keep, 'subagent', 'memory', ...lsp]), keep)
+  assert.deepEqual(dropUnused(keep), keep)
+})
+
+test('isTopLevelHeadless: sem UI e depth ausente ou 0', () => {
+  assert.equal(isTopLevelHeadless(false, undefined), true)
+  assert.equal(isTopLevelHeadless(false, '0'), true)
+  assert.equal(isTopLevelHeadless(false, '1'), false)
+  assert.equal(isTopLevelHeadless(true, undefined), false)
+})
+
 test('rewriteResult troca só os dois becos sem saída', () => {
   const t = (text: string) => [{ type: 'text', text }]
   assert.equal(rewriteResult('plan_mode_complete', t('Not in plan mode; tool ignored.')), NO_PLAN_MODE)
@@ -145,6 +163,8 @@ function load(active: string[], env: Record<string, string | undefined> = {}) {
   for (const k of [
     'PI_HEADLESS_LEAN',
     'PI_HEADLESS_FLOOR',
+    'PI_HEADLESS_TOOLS',
+    'PI_HEADLESS_TRIM',
     'PI_CODE_SUBAGENT_DEPTH',
     'CLAUDE_CONFIG_DIR',
     'CLAUDE_CODE_DISABLE_TERMINAL_TITLE',
@@ -178,6 +198,39 @@ test('sem UI: session_start desativa as duas ferramentas e desliga o título', (
     assert.equal(process.env.CLAUDE_CODE_DISABLE_TERMINAL_TITLE, '1')
   } finally {
     restore()
+  }
+})
+
+test('sem UI de topo: session_start tira subagent, memory e lsp_*; PI_HEADLESS_TOOLS=all mantém; com UI nada muda', () => {
+  const tools = ['read', 'bash', 'subagent', 'memory', 'lsp_hover', 'question']
+  const cut = load(tools)
+  try {
+    cut.handlers.session_start({}, { hasUI: false })
+    assert.deepEqual(cut.sets, [['read', 'bash']])
+  } finally {
+    cut.restore()
+  }
+  const all = load(tools, { PI_HEADLESS_TOOLS: 'all' })
+  try {
+    all.handlers.session_start({}, { hasUI: false })
+    assert.deepEqual(all.sets, [['read', 'bash', 'subagent', 'memory', 'lsp_hover']])
+  } finally {
+    all.restore()
+  }
+  const ui = load(tools)
+  try {
+    ui.handlers.session_start({}, { hasUI: true })
+    assert.deepEqual(ui.sets, [])
+  } finally {
+    ui.restore()
+  }
+  // subagente (depth >= 1) também roda sem UI (`--mode json -p`): mantém memory e lsp_*
+  const child = load(tools, { PI_CODE_SUBAGENT_DEPTH: '1' })
+  try {
+    child.handlers.session_start({}, { hasUI: false })
+    assert.deepEqual(child.sets, [['read', 'bash', 'subagent', 'memory', 'lsp_hover']])
+  } finally {
+    child.restore()
   }
 })
 
@@ -355,4 +408,58 @@ test('formato inesperado no handler: payload como está, sem lançar', () => {
     assert.equal(run({ CLAUDE_CONFIG_DIR: dir }, { hasUI: false, ...AN }, p), p)
     assert.equal(p.system[1].text, 'sem nada')
   })
+})
+
+// --- item 8: sem `todo` e sem a seção <docs> na sessão headless de topo ---
+const DOCS =
+  '<docs>\nPi documentation (read only when the user asks about the harness itself):\n- Main: /x/README.md\n</docs>'
+const withDocs = () => floorPayload(`Intro\n\n<tools>\n- read\n</tools>\n\n${DOCS}\n\n<headless>\nx\n</headless>`)
+
+test('trimTools tira só todo', () => {
+  assert.deepEqual(trimTools(['read', 'todo', 'bash', 'codemode']), ['read', 'bash', 'codemode'])
+  assert.deepEqual(trimTools(['read', 'edit']), ['read', 'edit'])
+})
+
+test('trimDocs tira a seção <docs> e o resto fica; sem a seção ou sem system, payload intacto', () => {
+  const out = trimDocs(withDocs()) as Sys
+  assert.equal(out.system[1].text, 'Intro\n\n<tools>\n- read\n</tools>\n\n<headless>\nx\n</headless>')
+  assert.equal(out.system[0].text, IDENTITY)
+  const none = floorPayload('sem docs')
+  assert.equal(trimDocs(none), undefined)
+  assert.equal(trimDocs({}), undefined)
+  assert.equal(trimDocs({ system: 'x' }), undefined)
+})
+
+test('handler: topo sem UI perde <docs> (com ou sem piso); subagente, UI e PI_HEADLESS_TRIM=0 mantêm', () => {
+  const has = (out: unknown) => (out as Sys).system.some((b) => b.text.includes('<docs>'))
+  withConfig(FLOOR, (dir) => {
+    assert.equal(has(run({ CLAUDE_CONFIG_DIR: dir }, { hasUI: false, ...AN }, withDocs())), false)
+    assert.equal(has(run({}, { hasUI: false, ...AN }, withDocs())), false) // piso indisponível não impede o corte
+    assert.equal(
+      has(run({ CLAUDE_CONFIG_DIR: dir, PI_CODE_SUBAGENT_DEPTH: '1' }, { hasUI: false, ...AN }, withDocs())),
+      true,
+    )
+    assert.equal(has(run({ CLAUDE_CONFIG_DIR: dir }, { hasUI: true, ...AN }, withDocs())), true)
+    assert.equal(has(run({ CLAUDE_CONFIG_DIR: dir, PI_HEADLESS_TRIM: '0' }, { hasUI: false, ...AN }, withDocs())), true)
+  })
+})
+
+test('session_start: topo sem UI tira todo; PI_HEADLESS_TRIM=0, PI_HEADLESS_TOOLS=all, subagente e UI mantêm', () => {
+  const tools = ['read', 'bash', 'todo', 'subagent', 'memory']
+  const cases: Array<[Record<string, string>, boolean, string[] | undefined]> = [
+    [{}, false, ['read', 'bash']],
+    [{ PI_HEADLESS_TRIM: '0' }, false, ['read', 'bash', 'todo']],
+    [{ PI_HEADLESS_TOOLS: 'all' }, false, undefined],
+    [{ PI_CODE_SUBAGENT_DEPTH: '1' }, false, undefined],
+    [{}, true, undefined],
+  ]
+  for (const [env, hasUI, want] of cases) {
+    const { handlers, sets, restore } = load(tools, env)
+    try {
+      handlers.session_start({}, { hasUI })
+      assert.deepEqual(sets.at(-1), want, JSON.stringify(env))
+    } finally {
+      restore()
+    }
+  }
 })
