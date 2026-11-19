@@ -185,6 +185,31 @@ def test_ny_pi_harbor_bundles_the_checkout_stage(
     assert (tmp_path / "bundled_home").read_text().strip() == str(stage)
 
 
+def test_ny_pi_harbor_bundle_is_per_round(tmp_path: Path, monkeypatch: MP) -> None:
+    """Two arms at once must not share one bundle path: each round bundles into its own out dir."""
+    stage = tmp_path / "stage"
+    stage.mkdir()
+    (stage / ".overlay-sha").write_text("abc")
+    (stage / ".ready").touch()
+    hd = tmp_path / "hd"
+    hd.mkdir()
+    script(hd / "bundle.sh", f'echo "$1" >> {tmp_path}/bundle_args\n')
+    harbor = script(
+        tmp_path / "harbor", f'echo "$PI_HARNESS_BUNDLE" >> {tmp_path}/env_seen\n'
+    )
+    monkeypatch.setenv("BENCH_HARBOR", str(harbor))
+    monkeypatch.setenv("BENCH_STAGE", str(stage))
+    monkeypatch.setattr(rb, "HARBOR_DIR", hd)
+    monkeypatch.setattr(rb, "oauth_token", lambda: "tok")
+    steps = rb.build_plan("pr", rb.load_toml(BENCH / "suites.toml"), ["s2"], k=1)
+    outs = [tmp_path / "o1", tmp_path / "o2"]
+    for o in outs:
+        rb._harbor_step(steps[0], "ny-pi", "m", o, 5.0)
+    want = [str(o / "pi-harness-bundle.tgz") for o in outs]
+    assert (tmp_path / "bundle_args").read_text().split() == want
+    assert set((tmp_path / "env_seen").read_text().split()) == set(want)
+
+
 def test_ny_pi_harbor_refuses_without_stage(tmp_path: Path, monkeypatch: MP) -> None:
     monkeypatch.delenv("BENCH_STAGE", raising=False)
     monkeypatch.setenv("BENCH_STAGE_ROOT", str(tmp_path / "none"))
@@ -325,10 +350,10 @@ def test_suites_toml_tiers_are_consistent() -> None:
         return {st["suite"]: st["k"] for st in cfg["tier"][tier]["steps"]}
 
     def units(tier: str) -> list[dict[str, Any]]:
-        return [{k: v for k, v in st.items() if k != "k"} for st in cfg["tier"][tier]["steps"]]  # fmt: skip
+        return [{k: v for k, v in st.items() if k not in ("k", "k_security")} for st in cfg["tier"][tier]["steps"]]  # fmt: skip
 
-    # the "precise" gate: candidate k3 against a k12 base over the same units (bench/stats.py, MARGIN)
-    assert ks("pr") == {"s1": 3, "s4": 3, "s5": 3, "s2": 1}
+    # the sequential gate: look 1 at k1 (security k3) against a k12 base over the same units (bench/stats.py, MARGIN)
+    assert ks("pr") == {"s1": 1, "s4": 1, "s5": 1, "s2": 1}
     assert ks("baseline") == {"s1": 12, "s4": 12, "s5": 12, "s2": 4}
     assert units("baseline") == units("pr")
     # the hard suite runs on demand only: PR gate time and cost must stay flat
