@@ -65,7 +65,8 @@ const CHECK = new RegExp(
       'tflint',
       'shellcheck',
       '(ba)?sh\\s+-n',
-      'node(\\s+--?[\\w-]+(=\\S+)?)*\\s+--(test|check)\\b',
+      // Cada opção é um token inteiro (`-\\S*` não cruza espaço): sem a ambiguidade exponencial do CodeQL js/redos.
+      'node(?:\\s+-\\S*)*?\\s+--(?:test|check)\\b',
       'deno\\s+(test|check|lint)',
       'php\\s+-l',
       'phpunit',

@@ -154,4 +154,16 @@ test('isCheckCommand: entrada adversarial termina rápido (sem ReDoS)', () => {
     assert.ok(performance.now() - start < 50)
   }
   assert.equal(isCheckCommand('systemd-run --user -- pytest'), true)
+  // CodeQL js/redos (PR #66): a alternativa `node` era exponencial em 'node ' + '-- -'×n (22 repetições ~20 ms).
+  const start = performance.now()
+  assert.equal(isCheckCommand(`node ${'-- -'.repeat(40)} x`), false)
+  assert.ok(performance.now() - start < 50)
+  for (const c of [
+    'node --test',
+    'node --experimental-strip-types --test a.ts',
+    'node --max-old-space-size=4096 --test',
+  ]) {
+    assert.equal(isCheckCommand(c), true, c)
+  }
+  assert.equal(isCheckCommand('node a.js --test'), false)
 })

@@ -1,17 +1,23 @@
 """Fuzz do parser do guard (check_bash): nunca lança, termina rápido, deny estável sob espaços extras.
 
 Roda em pytest/unittest com PRNG semeado (determinístico, ~segundos). O harness atheris é opcional:
-python3 test_guard_fuzz.py -atheris_runs=100000 (exige `pip install atheris`, fora do lockfile de CI).
+python3 fuzz/test_guard_fuzz.py -atheris_runs=100000 (exige `pip install atheris`, fora do lockfile de CI).
 """
 
+import importlib.util
 import os
 import random
 import sys
 import time
 import unittest
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import guard
+_GUARD = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "guard.py"
+)
+_spec = importlib.util.spec_from_file_location("guard", _GUARD)
+assert _spec is not None and _spec.loader is not None
+guard = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(guard)
 
 TOKENS = [
     "rm", "-rf", "-r", "/", "~", "git", "push", "--force", "main", "reset", "--hard", "sudo", "kill", "pkill",
@@ -71,7 +77,7 @@ class GuardFuzz(unittest.TestCase):
 
 
 def _atheris_main() -> None:
-    import atheris
+    import atheris  # type: ignore[import-untyped]  # sem stubs publicados; harness opcional
 
     def one(data: bytes) -> None:
         guard.check_bash(data[:MAX_LEN].decode("utf-8", "replace"), "/tmp")

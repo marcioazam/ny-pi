@@ -9,6 +9,7 @@ messages already in the conversation.
 from __future__ import annotations
 
 import json
+import os
 import re
 import threading
 import time
@@ -59,11 +60,14 @@ def route(body: Mapping[str, Any]) -> tuple[str, int]:
 
 def capture_path(root: Path, seq: int, case: str) -> Path:
     """Capture file of one request; ``ValueError`` when ``case`` would leave ``root``."""
-    base = root.resolve()
-    target = (base / f"req-{seq:03d}-{case or 'unrouted'}.json").resolve()
-    if not target.is_relative_to(base) or target.parent != base:
+    # normpath + startswith: the confinement check CodeQL py/path-injection recognizes (Path.resolve is not).
+    base = os.path.realpath(root)
+    target = os.path.normpath(
+        os.path.join(base, f"req-{seq:03d}-{case or 'unrouted'}.json")
+    )
+    if not target.startswith(base + os.sep) or os.path.dirname(target) != base:
         raise ValueError(f"capture path escapes {base}: {case!r}")
-    return target
+    return Path(target)
 
 
 def message_content(step: Step, block_id: str) -> list[dict[str, object]]:
