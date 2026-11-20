@@ -238,3 +238,7 @@ A razão de custo depende do estado do cache. A frio fica entre 1,39 e 1,48; com
 ### Gate
 
 34 checagens, todas `EXIT=0` (`/tmp/plan-sota-gate3.log`). sha256: patch `6c2a6e35acbac286`, `index.ts` `5af9f1fcc8f6ee5e`, `utils.ts` `5297266319d2047c`. Testes: `plan-sota.test.ts` 26/26, `test_plan_ab` 25/25.
+
+## Modo todo: item em andamento
+
+A correção do modo todo (item em andamento = todo `in_progress`, número = id da ferramenta `todo`, relógio desde o início do item) depende da seção Plano/Todo dos patches de UI que este repositório não publica, então fica na instalação local. O patch publicado no #38 não aplicava sobre a pilha publicada e foi retirado. `scripts/ci/check-patch-stack.sh` aplica a pilha publicada inteira, na ordem do glob, sobre pi-code 1.7.0 limpo e desfaz em ordem reversa, para que um patch fora de ordem ou gerado sobre outra pilha reprove na CI.

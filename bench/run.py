@@ -3,6 +3,7 @@
 
   run          run a tier for one arm (--dry-run prints the plan and the estimated cost, runs nothing)
   gate         paired verdict of a candidate round against the frozen base round + summary (bench/gate.py)
+  affects      functional|non-functional verdict of a PR diff (bench/classify/affects.py); bench-pr skips non-functional PRs
   post-status  publish the `bench-pr` commit status of a PR (L1: owner-authored PRs only)
   report       tables per suite and arm from rounds, used for the BASELINE
   scoreboard   the owner's three goal rules (accuracy, cost ceiling, exception) of ny-pi against reference rounds
@@ -32,6 +33,9 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from bench import evidence, gate, report, runners
+from bench.classify import affects
+from bench.metrics import summary as metrics_summary
+from bench.power import sim as power_sim
 
 BENCH = Path(__file__).resolve().parent
 REPO = BENCH.parent
@@ -91,6 +95,9 @@ def build_plan(
             "suite": st["suite"],
             "kind": s["kind"],
             "k": kk,
+            "k_security": None
+            if k
+            else st.get("k_security"),  # sequential gate: security cases run more reps
             "est": s["est_cost_usd"],
             "cfg": s,
             "st": st,
@@ -117,7 +124,11 @@ def build_plan(
             if not step["units"]:
                 continue
         step.setdefault("units", len(step.get("tasks") or []))
-        step["est_total"] = round(step["units"] * kk * step["est"], 2)
+        reps = step["units"] * kk
+        if step["k_security"] and "tasks" in step and s["kind"] == "internal":
+            n_sec = len(runners.s1_security_cases(step["tasks"]))
+            reps += n_sec * (step["k_security"] - kk)
+        step["est_total"] = round(reps * step["est"], 2)
         steps.append(step)
     return steps
 
@@ -157,10 +168,27 @@ def oauth_token() -> str:
     return p.stdout.strip()
 
 
+def api_key_file(arm: str) -> Path | None:
+    """BENCH_API_KEY_FILE: every arm bills an API key instead of the plan OAuth."""
+    f = os.environ.get("BENCH_API_KEY_FILE")
+    return Path(f) if f else None
+
+
+def read_api_key(path: Path) -> str:
+    try:
+        key = path.read_text().strip()
+    except OSError as e:
+        raise RuntimeError(f"BENCH_API_KEY_FILE unreadable: {e.strerror}") from e
+    if not key:
+        raise RuntimeError("BENCH_API_KEY_FILE is empty")
+    return key
+
+
 def arm_meta(
     arm: str, arms: dict[str, Any], kind: str, bin_: Path, model: str, budget: float
 ) -> dict[str, Any]:
     ver = arms[arm].get("version", "")
+    err = ""
     try:
         p = subprocess.run(
             [str(bin_), "--version"],
@@ -171,8 +199,9 @@ def arm_meta(
         )
         if p.returncode == 0 and p.stdout.strip():
             ver = p.stdout.strip().splitlines()[0]
-    except (OSError, subprocess.TimeoutExpired):
-        pass
+        err = p.stderr.strip()[-400:]
+    except (OSError, subprocess.TimeoutExpired) as e:
+        err = str(e)
     sha = subprocess.run(
         ["git", "-C", str(REPO), "rev-parse", "HEAD"],
         capture_output=True,
@@ -185,6 +214,10 @@ def arm_meta(
     }  # fmt: skip
     if arm == "ny-pi":
         meta["overlay_sha"] = overlay_sha(sha[:12])
+        if meta["overlay_sha"] is None:
+            # The --version call above builds the stage. Without a complete one every parallel run would try to
+            # rebuild it at once and the round would end not_verified much later (timer gate, 2026-11-15).
+            raise RuntimeError(f"ny-pi stage not built: {err or 'no .ready'}")
     return meta
 
 
@@ -194,12 +227,20 @@ def stage_root() -> Path:
 
 
 def nypi_stage(short: str) -> Path | None:
-    """The ny-pi stage built from this checkout (arms/ny-pi), identified by its .overlay-sha."""
+    """The ny-pi stage built from this checkout (arms/ny-pi), identified by its .overlay-sha. Only a complete
+    one counts (.ready): a build that failed halfway leaves .overlay-sha behind."""
     stage = os.environ.get("BENCH_STAGE")
     cands = (
         [Path(stage)] if stage else sorted(stage_root().glob(f"bench-nypi-{short}*"))
     )
-    return next((c for c in reversed(cands) if (c / ".overlay-sha").exists()), None)
+    return next(
+        (
+            c
+            for c in reversed(cands)
+            if (c / ".ready").exists() and (c / ".overlay-sha").exists()
+        ),
+        None,
+    )
 
 
 def overlay_sha(short: str) -> str | None:
@@ -218,8 +259,21 @@ def _harbor_step(
     jobs_n: int = 4,
 ) -> tuple[list[dict[str, Any]], bool]:
     cfg = s["cfg"]
-    agent_args, extra, tok_name = runners.harbor_agent(arm, model, HARBOR_DIR)
-    env = {tok_name: oauth_token(), **extra}
+    kf = api_key_file(arm)
+    ws = os.environ.get("BENCH_ANTHROPIC_WORKSPACE_ID")
+    agent_args, extra, tok_name = runners.harbor_agent(
+        arm, model, HARBOR_DIR, api=bool(kf), workspace=ws
+    )
+    if kf:
+        env = {"ANTHROPIC_API_KEY": read_api_key(kf), **extra}
+        if ws:
+            env["ANTHROPIC_WORKSPACE_ID"] = ws
+        for t in ("ANTHROPIC_OAUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN"):
+            os.environ.pop(
+                t, None
+            )  # run_harbor inherits os.environ: no OAuth in this mode
+    else:
+        env = {tok_name: oauth_token(), **extra}
     if arm == "ny-pi":
         # Bundle the stage of THIS checkout, never the live ~/.pi (2026-11-14: Harbor measured the local harness).
         short = subprocess.run(
@@ -229,10 +283,14 @@ def _harbor_step(
         stage = nypi_stage(short)
         if stage is None:
             raise RuntimeError(f"ny-pi stage for {short} not built; run the arm first")
+        # Per-round path: arms running side by side must not overwrite one shared bundle.
+        out.mkdir(parents=True, exist_ok=True)
+        bundle = out / "pi-harness-bundle.tgz"
         subprocess.run(
-            ["bash", str(HARBOR_DIR / "bundle.sh")],
+            ["bash", str(HARBOR_DIR / "bundle.sh"), str(bundle)],
             check=True, capture_output=True, env={**os.environ, "HOME": str(stage)},
         )  # fmt: skip
+        env["PI_HARNESS_BUNDLE"] = str(bundle)
     if (
         arm == "omp"
     ):  # fetch and checksum the pinned binaries the agent uploads (idempotent)
@@ -262,10 +320,8 @@ def _harbor_step(
         t: runners.split_of(t, cfg["seed"], cfg["heldout_pct"], heldout)
         for t in tasks or []
     }
-    n = max(
-        4, jobs_n
-    )  # trials in parallel = chunk size; a chunk is the unit saved and budget-checked
-    chunks = [tasks[i : i + n] for i in range(0, len(tasks), n)] if tasks else [[]]
+    n = max(4, jobs_n)  # sliding window: n single-task `harbor run` at once
+    chunks = [[t] for t in tasks] if tasks else [[]]  # [[]]: harbor picks the dataset
 
     def make(chunk: list[str], job: str) -> list[str]:
         return runners.harbor_cmd(
@@ -277,12 +333,14 @@ def _harbor_step(
             s["st"].get("n"),
             excl,
             s["k"],
-            concurrent=n,
+            concurrent=1
+            if chunk
+            else n,  # one trial per process; no list = whole dataset
             timeout_mult=cfg.get("agent_timeout_multiplier"),
         )
 
     return runners.run_harbor(
-        [], jobs, s["suite"], env, chunks, left, make, splits, sink
+        [], jobs, s["suite"], env, chunks, left, make, splits, sink, workers=n
     )
 
 
@@ -341,20 +399,34 @@ def execute(
             meta["not_verified"] = True
             return
         rs: list[dict[str, Any]] = []
+        planned, stage_err = (
+            False,
+            None,
+        )  # planned: the stage had units to run; zero rows then is no result
         if s["kind"] == "internal":
-            reps = runners.s1_case_reps(s["tasks"], s["k"])
-            todo = [
-                t for t in s["tasks"]
-                if not all((s["suite"], t, i) in done for i in range(reps[t]))
-            ]  # fmt: skip
-            if todo:
-                rs, err = runners.run_s1(
-                    kind, bin_, todo, s["k"], model, left, f"bench-{arm}-{tier}", {},
-                    max(2, jobs),
-                )  # fmt: skip
-                if err:
-                    meta["errors"].append(f"s1: {err}")
-                rs = fresh(rs)
+            sec = (
+                runners.s1_security_cases(s["tasks"]) if s.get("k_security") else set()
+            )
+            groups = [
+                (s["k"], [t for t in s["tasks"] if t not in sec]),
+                (s.get("k_security"), [t for t in s["tasks"] if t in sec]),
+            ]  # one S1 call per k: the evals runner takes a single --k
+            for kk, ts in groups:
+                reps = runners.s1_case_reps(ts, kk)
+                todo = [
+                    t for t in ts
+                    if not all((s["suite"], t, i) in done for i in range(reps[t]))
+                ]  # fmt: skip
+                planned = planned or bool(todo)
+                if todo:
+                    part, err = runners.run_s1(
+                        kind, bin_, todo, kk, model, left - runners.run_cost(rs),
+                        f"bench-{arm}-{tier}", {}, max(2, jobs),
+                    )  # fmt: skip
+                    if err:
+                        stage_err = err
+                        meta["errors"].append(f"s1: {err}")
+                    rs += fresh(part)
             save(rs)
         elif s["kind"] == "harbor":
             # Each chunk is recorded as it ends: a killed round keeps its finished trials.
@@ -368,6 +440,7 @@ def execute(
                 (c, rep) for c in s["cases"] for rep in range(s["k"])
                 if (s["suite"], c["id"], rep) not in done
             ]  # fmt: skip
+            planned = bool(units)
 
             def one(u: tuple[dict[str, Any], int]) -> dict[str, Any]:
                 r = runners.run_case(
@@ -388,6 +461,10 @@ def execute(
                     break
                 with ThreadPoolExecutor(jobs) as ex:
                     rs += list(ex.map(one, units[i : i + jobs]))
+        if planned and (stage_err or not rs):
+            meta["not_verified"] = True  # an empty or failed stage proves nothing
+            if not rs:
+                meta["errors"].append(f"{s['suite']}: stage returned no runs")
         bad = sum(1 for r in rs if r.get("error"))
         if rs and bad / len(rs) > MAX_ERROR_SHARE:
             # quota (429), auth, disk or sandbox failures are no score: stop before the next stage
@@ -456,7 +533,9 @@ def main(argv: list[str] | None = None) -> int:
     r = sub.add_parser("run")
     r.add_argument("--arm", required=True)
     r.add_argument(
-        "--tier", required=True, choices=["pr", "baseline", "full", "vanilla", "tb41"]
+        "--tier",
+        required=True,
+        choices=["pr", "baseline", "full", "vanilla", "tb41", "hard"],
     )
     r.add_argument("--model", required=True)
     r.add_argument("--budget-usd", type=float, required=True)
@@ -489,6 +568,10 @@ def main(argv: list[str] | None = None) -> int:
     g.add_argument("--base", type=Path, required=True)
     g.add_argument("--cand", type=Path, required=True)
     g.add_argument("--extend-with-cmd")
+    af = sub.add_parser("affects")
+    af.add_argument("--base", required=True)
+    af.add_argument("--head", required=True)
+    af.add_argument("--repo", type=Path, default=REPO)
     s = sub.add_parser("post-status")
     s.add_argument("--pr", type=int, required=True)
     s.add_argument(
@@ -509,6 +592,30 @@ def main(argv: list[str] | None = None) -> int:
     ev.add_argument(
         "--strict", action="store_true", help="exit 1 when a run has no transcript"
     )
+    mt = sub.add_parser(
+        "metrics", help="layer-1 metrics from stored transcripts, per arm and paired"
+    )
+    mt.add_argument(
+        "--rounds", nargs="+", required=True, help="round directories (globs allowed)"
+    )
+    mt.add_argument(
+        "--focus", default="ny-pi", help="arm compared with every other arm"
+    )
+    mt.add_argument("--json", type=Path, dest="json_out")
+    pw = sub.add_parser(
+        "power", help="power of the P(ahead) claim by simulation, per (delta, k, n)"
+    )
+    pw.add_argument("--ny", type=Path, required=True)
+    pw.add_argument("--ref", type=Path, required=True)
+    pw.add_argument(
+        "--deltas", default=power_sim.DEFAULT_DELTAS, help="true pass-rate gaps"
+    )
+    pw.add_argument("--ks", default=power_sim.DEFAULT_KS, help="repetitions per task")
+    pw.add_argument("--ns", default=power_sim.DEFAULT_NS, help="number of tasks")
+    pw.add_argument(
+        "--sims", type=int, default=power_sim.N_SIMS, help="simulations per cell"
+    )
+    pw.add_argument("--json", type=Path, dest="json_out")
     sub.add_parser("probe")
     a = p.parse_args(argv)
 
@@ -537,12 +644,18 @@ def main(argv: list[str] | None = None) -> int:
             )
         if a.resume and not a.out:
             p.error("--resume needs --out (the round directory to continue)")
-        if "BENCH_CC_CREDENTIALS" not in os.environ:
-            p.error("BENCH_CC_CREDENTIALS is required for a real run")
-        try:  # preflight: a dying token fails every run silently (baseline 2026-11-14)
-            oauth_token()
-        except subprocess.CalledProcessError as e:
-            p.error(f"OAuth preflight failed: {(e.stderr or '').strip()[-300:]}")
+        if kf := api_key_file(a.arm):
+            try:  # never print the key
+                read_api_key(kf)
+            except RuntimeError as e:
+                p.error(str(e))
+        else:
+            if "BENCH_CC_CREDENTIALS" not in os.environ:
+                p.error("BENCH_CC_CREDENTIALS is required for a real run")
+            try:  # preflight: a dying token fails every run silently (baseline 2026-11-14)
+                oauth_token()
+            except subprocess.CalledProcessError as e:
+                p.error(f"OAuth preflight failed: {(e.stderr or '').strip()[-300:]}")
         out = (
             a.out
             or Path(os.environ.get("BENCH_OUT", "/tmp"))
@@ -577,6 +690,14 @@ def main(argv: list[str] | None = None) -> int:
                 f.write(md)
         (a.cand / "verdict.json").write_text(json.dumps(v, indent=2) + "\n")
         return code
+    if a.cmd == "affects":
+        try:
+            print(affects.render(*affects.evaluate(a.base, a.head, a.repo)))
+        except (
+            subprocess.CalledProcessError
+        ) as e:  # fail closed: unknown diff = functional
+            print(f"functional\nF (diff unreadable: git exit {e.returncode})")
+        return 0
     if a.cmd == "post-status":
         return gate.post_status(a.pr, a.state, a.description)
     if a.cmd == "scoreboard":
@@ -589,6 +710,16 @@ def main(argv: list[str] | None = None) -> int:
         dirs = [Path(x) for pat in a.runs for x in (glob.glob(str(pat)) or [str(pat)])]
         a.out.write_text(report.render(dirs))
         print(f"report: {a.out}")
+        return 0
+    if a.cmd == "metrics":
+        dirs = [Path(x) for pat in a.rounds for x in (glob.glob(pat) or [pat])]
+        data = metrics_summary.compute(dirs, a.focus)
+        print(metrics_summary.render(data))
+        if a.json_out:
+            a.json_out.write_text(json.dumps(data, indent=1))
+        return 0
+    if a.cmd == "power":
+        print(power_sim.run(a.ny, a.ref, a.deltas, a.ks, a.ns, a.sims, a.json_out))
         return 0
     if a.cmd == "evidence":
         dirs = [Path(x) for pat in a.runs for x in (glob.glob(str(pat)) or [str(pat)])]

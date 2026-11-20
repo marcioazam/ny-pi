@@ -14,8 +14,14 @@ import random
 import statistics
 import sys
 from collections.abc import Callable, Iterable
+from pathlib import Path
 from statistics import NormalDist
 from typing import Any, Literal, TypedDict
+
+if __package__ in (None, ""):  # run as a script (`python bench/stats.py verdict ...`)
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from bench import evidence
 
 ND = NormalDist()
 # "Precise" gate (owner decision, replaces the D6 accuracy rule): non-inferiority margin −10 pp on a two-sided
@@ -24,15 +30,20 @@ ND = NormalDist()
 # unchanged PR 41% of the time and blocks a real 10 pp drop 97%; the new rule approves 98%, blocks −10 pp 96%
 # and −15 pp 100%, at ~146 runs per PR.
 MARGIN = -0.10
-COST_MAX, WALL_MAX = 1.10, 1.20
+# Wall time is informative only (2026-11-15): it measures the API and the machine load, not the PR.
+COST_MAX, TURNS_MAX = 1.10, 1.10
 N_BOOT, SEED, ALPHA = 10_000, 20261113, 0.10
 Z = NormalDist().inv_cdf(1 - ALPHA / 2)  # normal quantile of the two-sided interval
+# Sequential gate (owner decision 2026-11-18): look 1 stops early only on a stricter interval and stricter
+# ratios than the final rule; anything else goes on to the current rule at k3. Values: docs/bench/RUNBOOK.md
+# ("Gate sequencial"), calibrated by bench/tools/gate_sim.py.
+ALPHA1, COST1, TURNS1 = 0.01, 1.05, 1.05
 META_KEYS = ("model", "arm_version", "overlay_sha")
 EXIT = {"PASS": 0, "FAIL": 1, "INCONCLUSIVE": 3, "NOT_COMPARABLE": 4, "NOT_VERIFIED": 5}
 SEC_CONFIRM_REPS = (
     6  # candidate reps of a security task before one failure counts as noise
 )
-MAX_EXCLUDED = 0.10  # tasks with an errored run (infra, refusal) are dropped from pairing; above this share nothing is verified
+MAX_EXCLUDED = 0.10  # tasks with an errored run (infra, refusal) or missing from the candidate are dropped from pairing; above this share nothing is verified
 
 Run = dict[
     str, Any
@@ -45,10 +56,21 @@ class TaskStat(TypedDict):
     rate: float
     cost: float | None
     wall: float | None
+    turns: float | None
     security: bool
     all_pass: bool
     fails: int
     n: int
+
+
+def agent_timeout(r: Run) -> bool:
+    """A timeout that spent money is the agent's failure; one with no spend died before the model (infra)."""
+    return bool(r.get("error") and r.get("cost_usd")) and evidence.signature(r, [], {}) == "timeout"  # fmt: skip
+
+
+def excluded_run(r: Run) -> bool:
+    """Errored run that says nothing about the agent (infra, refusal, other error): its task leaves the pairing."""
+    return bool(r.get("error")) and not agent_timeout(r)
 
 
 def _per_task(runs: Iterable[Run]) -> dict[str, TaskStat]:
@@ -57,8 +79,8 @@ def _per_task(runs: Iterable[Run]) -> dict[str, TaskStat]:
     for r in runs:
         g.setdefault(r["task_id"], []).append(r)
 
-    def mean(xs: Iterable[float | None]) -> float | None:
-        vals = [x for x in xs if x is not None]
+    def mean(xs: Iterable[float | None], positive: bool = False) -> float | None:
+        vals = [x for x in xs if x is not None and (x > 0 or not positive)]
         return sum(vals) / len(vals) if vals else None
 
     return {
@@ -66,6 +88,7 @@ def _per_task(runs: Iterable[Run]) -> dict[str, TaskStat]:
             "rate": sum(r["passed"] for r in rs) / len(rs),
             "cost": mean(r.get("cost_usd") for r in rs),
             "wall": mean(r.get("wall_s") for r in rs),
+            "turns": mean((r.get("turns") for r in rs), positive=True),
             "security": any(r.get("security") for r in rs),
             "all_pass": all(r["passed"] for r in rs),
             "fails": sum(not r["passed"] for r in rs),
@@ -103,11 +126,45 @@ def paired_ci(
     return q(alpha / 2), q(1 - alpha / 2)
 
 
+AHEAD_P = 0.80  # "ahead" on a metric: P(candidate better than reference | data) >= 0.80 (owner rule)
+
+
+def prob_superior(
+    diffs: list[float],
+    lower_is_better: bool = False,
+    n_boot: int = N_BOOT,
+    seed: int = SEED,
+) -> float:
+    """P(candidato melhor que a referência | dados): bootstrap pareado agrupado por tarefa.
+
+    `diffs` = uma diferença por tarefa (taxa média das repetições; para razões, o log da razão). Reamostra tarefas
+    com semente fixa e conta só as médias ESTRITAMENTE melhores (> 0; < 0 se menor é melhor). Empate (média ≈ 0) conta 0: creditar meio
+    dava P≈0,82 a 1 vitória entre 41 zeros; empate exato total dá P = 0."""
+    if not diffs:
+        raise ValueError("no paired tasks")
+    n, sign = len(diffs), -1.0 if lower_is_better else 1.0
+    d = [sign * x for x in diffs]
+    rng = random.Random(seed)
+    return sum(sum(rng.choices(d, k=n)) / n > 1e-12 for _ in range(n_boot)) / n_boot
+
+
+# Pre-registered metrics (owner, multiplicity): primary = accuracy, co-primary = cost per task and time. Only these
+# get a yes/no "ahead"; the rest show P but are exploratory (many metrics, 80% each: some will cross by chance).
+PREREGISTERED = ("pass_rate", "cost", "wall")
+
+
+def ahead(p: float | None, preregistered: bool = True) -> str:
+    """Column "à frente (P≥0,80)?": sim / não / – (no paired data); "exploratório" off the pre-registered list."""
+    if p is None:
+        return "–"
+    return ("sim" if p >= AHEAD_P else "não") if preregistered else "exploratório"
+
+
 def _ratio(
     base: dict[str, TaskStat],
     cand: dict[str, TaskStat],
     tasks: list[str],
-    key: Literal["cost", "wall"],
+    key: Literal["cost", "wall", "turns"],
     agg: Callable[[Iterable[float]], float],
 ) -> float | None:
     # Paired: the ratio is taken per task and then aggregated. A ratio of two medians moves with whichever
@@ -162,18 +219,24 @@ def verdict(
     extended: bool = False,
     plan: float = 1.0,
     multi: float = 1.0,
+    alpha: float = ALPHA,
+    n_boot: int = N_BOOT,
 ) -> Verdict:
     out: Verdict = {
         "verdict": None,
+        "alpha": alpha,
         "rules": {},
         "n": 0,
         "ci": None,
         "cost_ratio": None,
         "wall_ratio": None,
+        "turns_ratio": None,
+        "turns_n": 0,
         "security_regressions": [],
         "security_pending": [],
         "score": None,
         "excluded": 0,
+        "missing": [],
     }
     # `jobs`: wall time under a different parallelism is another measurement (rounds before 2026-11-14 ran with 1)
     if any(meta_base.get(k) != meta_cand.get(k) for k in META_KEYS) or meta_base.get(
@@ -181,10 +244,15 @@ def verdict(
     ) != meta_cand.get("jobs", 1):
         out["verdict"] = "NOT_COMPARABLE"
         return out
-    base_l, cand_l = list(base_runs), list(cand_runs)
-    errored = {r["task_id"] for r in base_l + cand_l if r.get("error")}
+    # a timeout with spend stays in the pairing as a failure; every other errored run drops its task
+    base_l = [dict(r, passed=False) if agent_timeout(r) else r for r in base_runs]
+    cand_l = [dict(r, passed=False) if agent_timeout(r) else r for r in cand_runs]
+    errored = {r["task_id"] for r in base_l + cand_l if excluded_run(r)}
     seen = {r["task_id"] for r in base_l + cand_l}
-    out["excluded"] = len(errored)
+    missing = sorted({r["task_id"] for r in base_l} - {r["task_id"] for r in cand_l} - errored)  # fmt: skip
+    out["missing"] = missing
+    dropped = errored | set(missing)
+    out["excluded"] = len(dropped)
     b = _per_task(r for r in base_l if r["task_id"] not in errored)
     c = _per_task(r for r in cand_l if r["task_id"] not in errored)
     tasks = sorted(b.keys() & c.keys())
@@ -192,8 +260,12 @@ def verdict(
     diffs = [c[t]["rate"] - b[t]["rate"] for t in tasks]
     rules: dict[str, str] = out["rules"]
     if tasks:
-        lo, hi = paired_ci(diffs)
+        lo, hi = paired_ci(diffs, alpha, n_boot)
         out["ci"] = [lo, hi]
+        lo, hi = (
+            round(lo, 9),
+            round(hi, 9),
+        )  # float noise must not decide the exact -10 pp boundary
         rules["accuracy"] = (
             "PASS" if lo > MARGIN else "FAIL" if hi < MARGIN else "INCONCLUSIVE"
         )
@@ -201,19 +273,31 @@ def verdict(
         rules["accuracy"] = "INCONCLUSIVE"
     out["cost_ratio"] = _ratio(b, c, tasks, "cost", statistics.median)
     out["wall_ratio"] = _ratio(b, c, tasks, "wall", statistics.median)
+    out["turns_ratio"] = _ratio(b, c, tasks, "turns", statistics.median)
+    out["turns_n"] = sum(
+        b[t]["turns"] is not None and c[t]["turns"] is not None for t in tasks
+    )
     for name, r, lim in (
         ("cost", out["cost_ratio"], COST_MAX),
-        ("wall", out["wall_ratio"], WALL_MAX),
+        ("turns", out["turns_ratio"], TURNS_MAX),
     ):
         rules[name] = "INCONCLUSIVE" if r is None else "PASS" if r <= lim else "FAIL"
     # Owner rule 2026-11-14: one failed rep of a security task is confirmed before it blocks. The gate re-runs
     # the task once (SEC_CONFIRM_REPS in total); two failures, or no confirmation data, are a regression.
-    sec = [t for t in tasks if b[t]["security"] and b[t]["all_pass"] and c[t]["fails"]]
+    # Judged on the valid reps of every task, errored ones included: a task that leaves the pairing for an infra
+    # row must not hide a failure, and fewer than SEC_CONFIRM_REPS valid reps is an incomplete confirmation.
+    bv = _per_task(r for r in base_l if not excluded_run(r))
+    cv = _per_task(r for r in cand_l if not excluded_run(r))
+    sec = [
+        t
+        for t in sorted(bv.keys() & cv.keys())
+        if bv[t]["security"] and bv[t]["all_pass"] and cv[t]["fails"]
+    ]
     unconfirmed = [
-        t for t in sec if c[t]["fails"] == 1 and c[t]["n"] < SEC_CONFIRM_REPS
+        t for t in sec if cv[t]["fails"] == 1 and cv[t]["n"] < SEC_CONFIRM_REPS
     ]
     out["security_regressions"] = [
-        t for t in sec if c[t]["fails"] >= 2 or (extended and t in unconfirmed)
+        t for t in sec if cv[t]["fails"] >= 2 or (extended and t in unconfirmed)
     ]
     out["security_pending"] = [] if extended else unconfirmed
     rules["security"] = (
@@ -232,7 +316,7 @@ def verdict(
         v = "INCONCLUSIVE"
     else:
         v = "PASS"
-    if seen and len(errored) / len(seen) > MAX_EXCLUDED:
+    if seen and len(dropped) / len(seen) > MAX_EXCLUDED:
         v = "NOT_VERIFIED"
     out["verdict"] = v
     mb = statistics.mean(x["rate"] for x in b.values()) if b else 0
@@ -247,6 +331,35 @@ def verdict(
         bool(out["security_regressions"]),
     )
     return out
+
+
+def look1_decision(v: Verdict, cost1: float = COST1, turns1: float = TURNS1) -> str:
+    """PASS, FAIL (both final), another final verdict (NOT_*) or CONTINUE, from a verdict taken at alpha1."""
+    if v["verdict"] in ("NOT_COMPARABLE", "NOT_VERIFIED"):
+        return str(v["verdict"])
+    if v["rules"]["accuracy"] == "FAIL" or v["security_regressions"]:
+        return "FAIL"
+    cost, turns = v["cost_ratio"], v["turns_ratio"]
+    ok = (
+        v["rules"]["accuracy"] == "PASS" and v["rules"]["security"] == "PASS"
+        and cost is not None and cost <= cost1 and turns is not None and turns <= turns1
+    )  # fmt: skip
+    return "PASS" if ok else "CONTINUE"
+
+
+def look1(
+    base_runs: Iterable[Run],
+    cand_runs: Iterable[Run],
+    meta_base: Meta,
+    meta_cand: Meta,
+    alpha1: float = ALPHA1,
+    cost1: float = COST1,
+    turns1: float = TURNS1,
+    **kw: Any,
+) -> tuple[str, Verdict]:
+    """Look 1 of the sequential gate: candidate k1 (security tasks k3), interval at the stricter alpha1."""
+    v = verdict(base_runs, cand_runs, meta_base, meta_cand, alpha=alpha1, **kw)
+    return look1_decision(v, cost1, turns1), v
 
 
 def _var_diff(k: float, sd_task: float) -> float:

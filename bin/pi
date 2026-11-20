@@ -35,7 +35,7 @@ pi_load_local_env() {
     key=${line%%=*}
     val=${line#*=}
     case "$key" in
-    PI_BYPASS_PERMISSIONS | PI_COMPACT_AT | PONYTAIL_QUIET_STARTUP | PI_KNOWLEDGE_VAULT | PI_GRAPHS_VAULT | CODEGRAPH_AUTO_ROOT | PI_SUBAGENT_RESPAWN) ;;
+    PI_BYPASS_PERMISSIONS | PI_COMPACT_AT | PONYTAIL_QUIET_STARTUP | PI_KNOWLEDGE_VAULT | PI_GRAPHS_VAULT | CODEGRAPH_AUTO_ROOT | PI_SUBAGENT_RESPAWN | PI_EFFORT_SANDWICH | PI_EFFORT_SANDWICH_TURNS) ;;
     *)
       echo "pi: local.env:$lineno ignored" >&2
       continue
@@ -98,10 +98,18 @@ esac
 
 # No project .claude (nor ~/.claude, which becomes a "project" in ~): only CLAUDE_CONFIG_DIR.
 # --no-approve unless the call has an explicit `pi --approve` / `-a`.
-case " $* " in
-*" --approve "* | *" -a "*) ;;
-*) set -- --no-approve "$@" ;;
-esac
+# Whole arguments only (never prompt text), and nothing after `--` counts.
+approved=
+for a in "$@"; do
+  case "$a" in
+  --) break ;;
+  --approve | -a)
+    approved=1
+    break
+    ;;
+  esac
+done
+[ -n "$approved" ] || set -- --no-approve "$@"
 
 # Patches are pinned to exact versions and fail closed: on any other version they are skipped
 # with one warning and pi still starts. Override the pins with PI_HARNESS_PI_CODE_VERSION / PI_HARNESS_PI_VERSION.
@@ -177,6 +185,10 @@ if [ -n "$pi_cur" ] && [ -d "$pi_dist" ]; then
     echo "pi: pi $pi_cur is not ${PI_HARNESS_PI_VERSION:-1.5.2}, skipping core patch" >&2
   elif [ -w "$pi_dist/core/sdk.js" ] && ! grep -q piSameContextMessage "$pi_dist/core/sdk.js"; then
     node "$HOME/.pi/agent/claude-home/patches/pi-core/cache-warm-identity.mjs" "$pi_dist" || true
+  fi
+  # MCP close grace 500 -> 100 ms (patches/pi-core/mcp-close-grace.mjs, docs/specs/0003-boot-exit.md); same grep shortcut.
+  if [ "$pi_cur" = "${PI_HARNESS_PI_VERSION:-1.5.2}" ] && [ -w "$pi_dist/bundle/chunks" ] && grep -qs 'STDIN_CLOSE_GRACE_MS=500' "$pi_dist"/bundle/chunks/*.js; then
+    node "$HOME/.pi/agent/claude-home/patches/pi-core/mcp-close-grace.mjs" "$pi_dist" || true
   fi
 fi
 

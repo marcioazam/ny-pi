@@ -14,8 +14,10 @@ import re
 import shutil
 import subprocess
 import tempfile
+import threading
 import time
 from collections.abc import Callable, Collection, Iterable
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -35,6 +37,10 @@ DRIFT_MARK = "harness changed"
 SUBAGENT_NAMES = {"Task", "Agent", "subagent"}
 # A run that reached the model always has cost > 0; none means auth, quota (429), disk or sandbox died first.
 INFRA_ERR = "infra: no model spend"
+RATE_LIMIT_ERR = "infra: provider rate limit (429)"
+_RATE_LIMIT = re.compile(
+    r"rate_limit_error|rate limit|quota exceeded \(account usage limit", re.IGNORECASE
+)
 INFRA_STREAK = (
     5  # consecutive infra runs that stop a stage instead of burning the queue
 )
@@ -114,6 +120,8 @@ def parse_s1_runs(path: Path) -> list[Run]:
                 split=r.get("split", "dev"),
                 subagents_used=bool(score.get("delegated")),
                 error=r.get("error"),
+                turns=result.get("turns"),
+                tokens=result.get("tokens"),
             )
         )
     return out
@@ -167,6 +175,16 @@ def run_s1(
     if rdir is None:
         return [], f"infra: no results dir (exit {p.returncode})"
     return _read_s1(rdir), None if p.returncode == 0 else f"exit {p.returncode}"
+
+
+def s1_security_cases(cases: list[str]) -> set[str]:
+    """The given S1 cases that belong to the `security` suite of the evals (the sequential gate runs them at k3)."""
+    sec: set[str] = set()
+    for f in sorted((EVALS_RUN.parent / "cases").glob("*.jsonl")):
+        for line in f.read_text().splitlines():
+            if line.strip() and (c := json.loads(line)).get("suite") == "security":
+                sec.add(c["id"])
+    return sec & set(cases)
 
 
 def s1_case_reps(cases: list[str], k: int) -> dict[str, int]:
@@ -255,17 +273,47 @@ def harbor_bin() -> list[str]:
 
 
 def harbor_agent(
-    arm: str, model: str, harbor_dir: Path
+    arm: str,
+    model: str,
+    harbor_dir: Path,
+    api: bool = False,
+    workspace: str | None = None,
 ) -> tuple[list[str], dict[str, str], str]:
-    """(agent flags, extra env, token env var name) for an arm; the token itself is added by the caller."""
+    """(agent flags, extra env, token env var name) for an arm; the token itself is added by the caller.
+    api=True (API-key mode): cc-vanilla drops OAuth and carries the workspace header through `--ae`
+    (Harbor's claude-code agent forwards only known variables; `--ae` lands in every agent exec);
+    pi-vanilla uses the subclass that writes the header into models.json."""
     m = f"anthropic/{model}"
     if arm == "cc-vanilla":
+        if api:
+            hdr = (
+                [
+                    "--ae",
+                    f"ANTHROPIC_CUSTOM_HEADERS=anthropic-workspace-id: {workspace}",
+                ]
+                if workspace
+                else []
+            )
+            return ["-a", "claude-code", *hdr, "-m", m], {}, "ANTHROPIC_API_KEY"
         return (
             ["-a", "claude-code", "-m", m],
             {"CLAUDE_FORCE_OAUTH": "1"},
             "CLAUDE_CODE_OAUTH_TOKEN",
         )
     if arm == "pi-vanilla":
+        if api:
+            return (
+                [
+                    "-a",
+                    "pi_vanilla_api_agent:PiVanillaApiAgent",
+                    "--ak",
+                    "version=1.5.2",
+                    "-m",
+                    m,
+                ],
+                {"PYTHONPATH": str(harbor_dir)},
+                "ANTHROPIC_API_KEY",
+            )
         return (
             ["-a", "pi", "--ak", "version=1.5.2", "-m", m],
             {},
@@ -385,20 +433,29 @@ def run_harbor(
     make_cmd: Any,
     splits: dict[str, str] | None = None,
     sink: Callable[[list[Run]], None] | None = None,
+    workers: int = 1,
 ) -> tuple[list[Run], bool]:
-    """Run chunks of tasks one `harbor run` each, stop when the budget is gone. Returns (runs, exhausted).
-    `sink` gets each chunk's runs as soon as it ends, so a killed round keeps what it finished."""
+    """Sliding window: up to `workers` `harbor run` at once, one per chunk; a finished one frees its slot.
+    Before starting a chunk, stop if the budget is gone or infra is down (running ones finish).
+    `sink` gets each chunk's runs as soon as it ends. Returns (runs in chunk order, exhausted)."""
+    done: list[tuple[int, list[Run]]] = []
     runs: list[Run] = []
+    lock = threading.Lock()
+    stopped = False
     penv = {**os.environ, **env}
-    for i, chunk in enumerate(chunks):
-        if run_cost(runs) >= budget_usd:
-            return runs, True
-        job, n = f"{suite}-{i}", 0
-        while (
-            job_root / job
-        ).exists():  # an existing job name makes harbor replay old trials (resume)
-            n += 1
-            job = f"{suite}-{i}-r{n}"
+
+    def one(i: int, chunk: list[str]) -> None:
+        nonlocal stopped
+        with lock:
+            if stopped or run_cost(runs) >= budget_usd:
+                stopped = True
+                return
+            job, n = f"{suite}-{i}", 0
+            while (
+                job_root / job
+            ).exists():  # an existing job name makes harbor replay old trials (resume)
+                n += 1
+                job = f"{suite}-{i}-r{n}"
         p = subprocess.run(
             make_cmd(chunk, job), env=penv, capture_output=True, text=True, check=False
         )
@@ -408,15 +465,19 @@ def run_harbor(
                 make_run(suite, t, 0, False, error=f"harbor exit {p.returncode}")
                 for t in chunk
             ]
-        runs += got
-        if sink:
-            sink(got)
-        if infra_streak(runs) >= INFRA_STREAK:
-            return (
-                runs,
-                True,
-            )  # quota/disk/auth is down: stop, never burn the whole queue
-    return runs, run_cost(runs) >= budget_usd
+        with lock:
+            done.append((i, got))
+            runs.extend(got)
+            if sink:
+                sink(got)
+            if infra_streak(runs) >= INFRA_STREAK:
+                stopped = True  # quota/disk/auth is down: never burn the whole queue
+
+    with ThreadPoolExecutor(max_workers=max(1, workers)) as ex:
+        for f in [ex.submit(one, i, c) for i, c in enumerate(chunks)]:
+            f.result()
+    ordered = [r for _, g in sorted(done, key=lambda d: d[0]) for r in g]
+    return ordered, stopped or run_cost(ordered) >= budget_usd
 
 
 # ------------------------------------------------------------------------------------ S4/S5 cases
@@ -525,6 +586,10 @@ def parse_events(text: str, kind: str) -> dict[str, Any]:
                 final = _text_of(msg.get("content")) or final
                 if msg.get("stopReason") == "error":
                     err = str(msg.get("errorMessage") or "provider error")[:200]
+                    if _RATE_LIMIT.search(str(msg.get("errorMessage"))):
+                        err = RATE_LIMIT_ERR  # pi in -p waited for the reset until the timeout (gate #28)
+                elif err == RATE_LIMIT_ERR:
+                    err = None  # a later good reply: the limit passed
     if not events:
         err = "no events"
     first = used[0] if used else None
@@ -635,7 +700,9 @@ def run_case(
             return r
 
         if rc is None:
-            return done(False, "timeout")
+            return done(
+                False, ev["error"] if ev["error"] == RATE_LIMIT_ERR else "timeout"
+            )
         err = ev["error"] or (f"exit {rc}" if rc else None)
         passed = False
         if case.get("kind", "outcome") == "ask":
