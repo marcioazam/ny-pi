@@ -1,3 +1,7 @@
+> **Este repositório está arquivado.** O ny-pi foi incorporado ao core do
+> [Nycode](https://github.com/marcioazam/nycode). Baixe o binário em <https://github.com/marcioazam/nycode/releases>.
+> **This repository is archived.** ny-pi now lives in the core of Nycode.
+
 # ny-pi
 
 A harness for the [pi](https://github.com/earendil-works/pi) coding agent (wrapper, extensions, hooks, skills, agents
